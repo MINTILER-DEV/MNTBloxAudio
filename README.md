@@ -78,26 +78,6 @@ dotnet run --project .\MNTBloxAudio.App
 dotnet build .\MNTBloxAudio.slnx
 ```
 
-### Release publish with the batch file
-
-If you have `buildproj.bat` in the repo root, run:
-
-```powershell
-.\buildproj.bat
-```
-
-That script publishes a self-contained Windows Release build into:
-
-```text
-.\publish\
-```
-
-The current script runs:
-
-```bat
-dotnet publish ".\MNTBloxAudio.App\MNTBloxAudio.App.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ".\publish\"
-```
-
 ## Troubleshooting
 
 ### The app says no match was found
