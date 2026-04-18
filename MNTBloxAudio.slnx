@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MNTBloxAudio.App/MNTBloxAudio.App.csproj" />
+  <Project Path="MNTBloxAudio.Core/MNTBloxAudio.Core.csproj" />
+</Solution>

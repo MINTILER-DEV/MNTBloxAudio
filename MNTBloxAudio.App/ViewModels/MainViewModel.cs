@@ -1,0 +1,1221 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
+using MNTBloxAudio.Core.Models;
+using MNTBloxAudio.Core.Services;
+
+namespace MNTBloxAudio.App.ViewModels;
+
+public partial class MainViewModel : ObservableObject
+{
+    private readonly SemaphoreSlim playbackLock = new(1, 1);
+    private readonly SettingsStore settingsStore;
+    private readonly AudioDeviceService deviceService;
+    private readonly RobloxAudioSessionService sessionService;
+    private readonly ReplacementPlaybackService playbackService;
+    private readonly ProxyFallbackService proxyService;
+    private readonly RobloxPlayerLogService playerLogService;
+    private readonly RobloxSoundCacheService soundCacheService;
+    private readonly RobloxAssetDownloadService assetDownloadService;
+    private readonly Lock monitorStateLock = new();
+    private readonly HashSet<ReplacementRule> observedCacheRules = [];
+
+    private AppSettings settings = new();
+    private bool initializationComplete;
+    private bool robloxMuted;
+    private string? selectedOutputDeviceId;
+    private CancellationTokenSource? monitorCancellationTokenSource;
+    private Task? monitorTask;
+    private bool lastRobloxAudioActivityState;
+    private HashSet<string> lastSessionIdentifiers = [];
+
+    [ObservableProperty]
+    private ObservableCollection<AudioDeviceInfo> renderDevices = [];
+
+    [ObservableProperty]
+    private ObservableCollection<RobloxAudioSessionInfo> robloxSessions = [];
+
+    [ObservableProperty]
+    private ObservableCollection<ReplacementRule> rules = [];
+
+    [ObservableProperty]
+    private ObservableCollection<ActivityLogEntry> activity = [];
+
+    [ObservableProperty]
+    private ObservableCollection<ActivityLogEntry> proxyOutput = [];
+
+    [ObservableProperty]
+    private ObservableCollection<RobloxSoundCacheEntry> cachedSoundFiles = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedOutputDeviceName))]
+    private AudioDeviceInfo? selectedOutputDevice;
+
+    [ObservableProperty]
+    private ReplacementRule? selectedRule;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputVolumeLabel))]
+    private int outputVolumePercent = 100;
+
+    [ObservableProperty]
+    private bool enableProxyFallback;
+
+    [ObservableProperty]
+    private bool autoReplaceOnRobloxAudioActivity;
+
+    [ObservableProperty]
+    private bool enableExperimentalProxyReplacement;
+
+    [ObservableProperty]
+    private bool autoReplaceOnDetection = true;
+
+    [ObservableProperty]
+    private bool autoMuteRobloxDuringPlayback = true;
+
+    [ObservableProperty]
+    private bool autoRestoreRobloxAfterPlayback = true;
+
+    [ObservableProperty]
+    private bool isProxyRunning;
+
+    [ObservableProperty]
+    private int proxyPort = 8877;
+
+    [ObservableProperty]
+    private string sessionStatusText = "Waiting for refresh";
+
+    [ObservableProperty]
+    private string robloxMuteStatus = "Live";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ReplacementModeText))]
+    private bool autoApplyCacheReplacements;
+
+    public MainViewModel(
+        SettingsStore settingsStore,
+        AudioDeviceService deviceService,
+        RobloxAudioSessionService sessionService,
+        ReplacementPlaybackService playbackService,
+        ProxyFallbackService proxyService,
+        RobloxPlayerLogService playerLogService,
+        RobloxSoundCacheService soundCacheService,
+        RobloxAssetDownloadService assetDownloadService)
+    {
+        this.settingsStore = settingsStore;
+        this.deviceService = deviceService;
+        this.sessionService = sessionService;
+        this.playbackService = playbackService;
+        this.proxyService = proxyService;
+        this.playerLogService = playerLogService;
+        this.soundCacheService = soundCacheService;
+        this.assetDownloadService = assetDownloadService;
+
+        proxyService.AssetDetected += OnAssetDetected;
+        proxyService.RequestObserved += OnProxyRequestObserved;
+    }
+
+    public int RobloxSessionCount => RobloxSessions.Count;
+
+    public int RuleCount => Rules.Count;
+
+    public string SelectedOutputDeviceName => SelectedOutputDevice?.Name ?? "System default";
+
+    public string OutputVolumeLabel => $"{OutputVolumePercent}%";
+
+    public string ReplacementModeText => AutoApplyCacheReplacements
+        ? "Auto cache re-check is on"
+        : "Manual apply only";
+
+    public async Task InitializeAsync()
+    {
+        sessionService.SetMute(false);
+        robloxMuted = false;
+        RobloxMuteStatus = "Live";
+
+        settings = await settingsStore.LoadAsync();
+
+        OutputVolumePercent = settings.OutputVolumePercent;
+        selectedOutputDeviceId = settings.PreferredOutputDeviceId;
+        AutoReplaceOnRobloxAudioActivity = false;
+        EnableProxyFallback = false;
+        EnableExperimentalProxyReplacement = false;
+        AutoReplaceOnDetection = true;
+        AutoApplyCacheReplacements = settings.AutoApplyCacheReplacements;
+        AutoMuteRobloxDuringPlayback = settings.AutoMuteRobloxDuringPlayback;
+        AutoRestoreRobloxAfterPlayback = settings.AutoRestoreRobloxAfterPlayback;
+        ProxyPort = settings.ProxyPort;
+
+        Rules = new ObservableCollection<ReplacementRule>(settings.Rules.Select(rule => new ReplacementRule
+        {
+            Name = rule.Name,
+            AssetIdPattern = rule.AssetIdPattern,
+            FilePath = rule.FilePath,
+            IsEnabled = rule.IsEnabled,
+            GainPercent = rule.GainPercent,
+            SourceAssetHash = rule.SourceAssetHash,
+            SourceAssetLength = rule.SourceAssetLength,
+            ReplacementFileHash = rule.ReplacementFileHash,
+            ReplacementFileLength = rule.ReplacementFileLength,
+            PreparedAt = rule.PreparedAt,
+            PreparationVersion = rule.PreparationVersion,
+        }));
+        AttachRuleEvents(Rules);
+
+        SelectedRule = Rules.FirstOrDefault();
+
+        await RefreshAsync();
+
+        if (!string.IsNullOrWhiteSpace(selectedOutputDeviceId))
+        {
+            SelectedOutputDevice = RenderDevices.FirstOrDefault(device =>
+                string.Equals(device.Id, selectedOutputDeviceId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        SelectedOutputDevice ??= RenderDevices.FirstOrDefault(device => device.IsDefault) ?? RenderDevices.FirstOrDefault();
+        selectedOutputDeviceId = SelectedOutputDevice?.Id;
+        settings.PreferredOutputDeviceId = selectedOutputDeviceId;
+
+        proxyService.UpdateRules(Rules);
+        await UpdateCachedSoundFilesAsync();
+
+        if (AutoApplyCacheReplacements)
+        {
+            await StartOrStopProxyAsync(forceStart: true);
+        }
+
+        StartRobloxAudioMonitor();
+        initializationComplete = true;
+        AddActivity("Startup", "App initialized in cache replacement mode.");
+    }
+
+    public async Task ShutdownAsync()
+    {
+        if (monitorCancellationTokenSource is not null)
+        {
+            monitorCancellationTokenSource.Cancel();
+        }
+
+        if (monitorTask is not null)
+        {
+            try
+            {
+                await monitorTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during shutdown.
+            }
+        }
+
+        sessionService.SetMute(false);
+        robloxMuted = false;
+        RobloxMuteStatus = "Live";
+
+        AutoApplyCacheReplacements = false;
+        await proxyService.StopAsync();
+        IsProxyRunning = false;
+        EnableProxyFallback = false;
+        await SaveConfigurationAsync(logActivity: false);
+        playbackService.Dispose();
+        proxyService.Dispose();
+    }
+
+    [RelayCommand]
+    private Task Refresh() => RefreshAsync();
+
+    [RelayCommand]
+    private async Task AddRuleAsync()
+    {
+        var rule = new ReplacementRule
+        {
+            Name = $"Rule {Rules.Count + 1}",
+            GainPercent = OutputVolumePercent,
+        };
+
+        Rules.Add(rule);
+        AttachRuleEvents(rule);
+        SelectedRule = rule;
+        proxyService.UpdateRules(Rules);
+        OnPropertyChanged(nameof(RuleCount));
+        AddActivity("Rules", $"Added {rule.Name}.");
+        await SaveConfigurationAsync();
+    }
+
+    [RelayCommand]
+    private async Task RemoveSelectedRuleAsync()
+    {
+        if (SelectedRule is null)
+        {
+            return;
+        }
+
+        var removedRuleName = SelectedRule.Name;
+        DetachRuleEvents(SelectedRule);
+        observedCacheRules.Remove(SelectedRule);
+        Rules.Remove(SelectedRule);
+        SelectedRule = Rules.FirstOrDefault();
+        proxyService.UpdateRules(Rules);
+        OnPropertyChanged(nameof(RuleCount));
+        AddActivity("Rules", $"Removed {removedRuleName}.");
+        await SaveConfigurationAsync();
+    }
+
+    [RelayCommand]
+    private async Task BrowseSelectedRuleAsync()
+    {
+        await EnsureSelectedRuleAsync();
+
+        if (SelectedRule is null)
+        {
+            AddActivity("Rules", "Browse was requested but no rule could be created.");
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Supported Audio|*.wav;*.mp3|All Files|*.*",
+            CheckFileExists = true,
+            Multiselect = false,
+            Title = "Choose replacement audio",
+        };
+
+        var result = Application.Current.Dispatcher.Invoke(() =>
+            dialog.ShowDialog(Application.Current.MainWindow));
+
+        if (result == true)
+        {
+            SelectedRule.FilePath = dialog.FileName;
+            SelectedRule.ReplacementFileLength = new FileInfo(dialog.FileName).Length;
+            SelectedRule.ReplacementFileHash = string.Empty;
+            SelectedRule = SelectedRule;
+            OnPropertyChanged(nameof(SelectedRule));
+            AddActivity("Rules", $"Attached file to {SelectedRule.Name}: {Path.GetFileName(dialog.FileName)}");
+            await SaveConfigurationAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task PlaySelectedRuleAsync()
+    {
+        if (SelectedRule is null)
+        {
+            return;
+        }
+
+        await PlayRuleAsync(SelectedRule, "manual preview");
+    }
+
+    [RelayCommand]
+    private async Task ToggleRobloxMuteAsync()
+    {
+        robloxMuted = !robloxMuted;
+        sessionService.SetMute(robloxMuted);
+        RobloxMuteStatus = robloxMuted ? "Muted" : "Live";
+        AddActivity("Audio", robloxMuted ? "Muted Roblox sessions." : "Unmuted Roblox sessions.");
+        await RefreshAsync();
+    }
+
+    [RelayCommand]
+    private Task SaveConfiguration() => SaveConfigurationAsync();
+
+    [RelayCommand]
+    private async Task PrepareRuleAssetsAsync()
+    {
+        var candidateRules = Rules
+            .Where(rule => rule.IsEnabled)
+            .ToList();
+
+        if (candidateRules.Count == 0)
+        {
+            AddActivity("Prepare", "No enabled rules are available to prepare.");
+            return;
+        }
+
+        var preparedCount = 0;
+        foreach (var rule in candidateRules)
+        {
+            var wasPrepared = IsRulePrepared(rule);
+            if (await EnsureRulePreparedAsync(rule, logSkipMessage: true) && !wasPrepared)
+            {
+                preparedCount++;
+            }
+        }
+
+        await SaveConfigurationAsync();
+        await UpdateCachedSoundFilesAsync();
+        AddActivity("Prepare", preparedCount == 0
+            ? "No rules were prepared."
+            : $"Prepared {preparedCount} rule(s) for cache replacement.");
+    }
+
+    [RelayCommand]
+    private async Task SaveAndApplySelectedRuleAsync()
+    {
+        await EnsureSelectedRuleAsync();
+
+        if (SelectedRule is null)
+        {
+            return;
+        }
+
+        var rule = SelectedRule;
+        if (!rule.IsEnabled)
+        {
+            var restoredCount = await RestoreRuleToOriginalAsync(rule, "saved as disabled");
+            await SaveConfigurationAsync();
+            await UpdateCachedSoundFilesAsync();
+
+            AddActivity(
+                "Rules",
+                restoredCount > 0
+                    ? $"Saved {rule.Name} as original audio and restored {restoredCount} cached file(s)."
+                    : $"Saved {rule.Name} as original audio.");
+            return;
+        }
+
+        var prepared = await EnsureRulePreparedAsync(rule, logSkipMessage: false);
+        await SaveConfigurationAsync();
+
+        if (!prepared)
+        {
+            return;
+        }
+
+        await ApplyPreparedCacheReplacementsAsync(
+            "save and apply",
+            TryGetExactAssetId(rule.AssetIdPattern));
+        await SaveConfigurationAsync();
+        AddActivity("Rules", $"Saved and applied {rule.Name}.");
+    }
+
+    [RelayCommand]
+    private async Task ApplyAllRulesAsync()
+    {
+        var enabledRules = Rules
+            .Where(rule => rule.IsEnabled)
+            .ToList();
+
+        if (enabledRules.Count == 0)
+        {
+            AddActivity("Rules", "There are no enabled rules to apply.");
+            return;
+        }
+
+        var preparedCount = 0;
+        foreach (var rule in enabledRules)
+        {
+            var wasPrepared = IsRulePrepared(rule);
+            var prepared = await EnsureRulePreparedAsync(rule, logSkipMessage: false);
+            if (prepared && !wasPrepared)
+            {
+                preparedCount++;
+            }
+        }
+
+        await SaveConfigurationAsync();
+        await ApplyPreparedCacheReplacementsAsync("apply all");
+        await SaveConfigurationAsync(logActivity: false);
+
+        AddActivity(
+            "Rules",
+            preparedCount > 0
+                ? $"Applied all enabled rules and prepared {preparedCount} new rule(s)."
+                : "Applied all enabled rules.");
+    }
+
+    [RelayCommand]
+    private async Task ApplyCacheReplacementsAsync()
+    {
+        await ApplyPreparedCacheReplacementsAsync("manual apply");
+    }
+
+    private async Task RefreshAsync()
+    {
+        var sessions = sessionService.GetRobloxSessions();
+        var devices = deviceService.GetRenderDevices();
+        await ApplySnapshotAsync(devices, sessions);
+        await UpdateCachedSoundFilesAsync();
+    }
+
+    private async Task EnsureSelectedRuleAsync()
+    {
+        if (SelectedRule is not null)
+        {
+            return;
+        }
+
+        if (Rules.Count == 0)
+        {
+            var rule = new ReplacementRule
+            {
+                Name = "Rule 1",
+                GainPercent = OutputVolumePercent,
+            };
+
+            Rules.Add(rule);
+            AttachRuleEvents(rule);
+            OnPropertyChanged(nameof(RuleCount));
+        }
+
+        SelectedRule = Rules.FirstOrDefault();
+        proxyService.UpdateRules(Rules);
+        await SaveConfigurationAsync();
+    }
+
+    private async Task SaveConfigurationAsync(bool logActivity = true)
+    {
+        settings.PreferredOutputDeviceId = selectedOutputDeviceId ?? SelectedOutputDevice?.Id;
+        settings.OutputVolumePercent = OutputVolumePercent;
+        settings.AutoReplaceOnRobloxAudioActivity = false;
+        settings.EnableProxyFallback = false;
+        settings.EnableExperimentalProxyReplacement = false;
+        settings.AutoReplaceOnDetection = true;
+        settings.AutoApplyCacheReplacements = AutoApplyCacheReplacements;
+        settings.AutoMuteRobloxDuringPlayback = AutoMuteRobloxDuringPlayback;
+        settings.AutoRestoreRobloxAfterPlayback = AutoRestoreRobloxAfterPlayback;
+        settings.ProxyPort = ProxyPort;
+        settings.Rules = Rules.Select(rule => new ReplacementRule
+        {
+            Name = rule.Name,
+            AssetIdPattern = rule.AssetIdPattern,
+            FilePath = rule.FilePath,
+            IsEnabled = rule.IsEnabled,
+            GainPercent = rule.GainPercent,
+            SourceAssetHash = rule.SourceAssetHash,
+            SourceAssetLength = rule.SourceAssetLength,
+            ReplacementFileHash = rule.ReplacementFileHash,
+            ReplacementFileLength = rule.ReplacementFileLength,
+            PreparedAt = rule.PreparedAt,
+            PreparationVersion = rule.PreparationVersion,
+        }).ToList();
+
+        await settingsStore.SaveAsync(settings);
+        proxyService.UpdateRules(Rules);
+
+        if (logActivity)
+        {
+            AddActivity("Config", "Saved configuration to AppData.");
+        }
+    }
+
+    private void StartRobloxAudioMonitor()
+    {
+        monitorCancellationTokenSource = new CancellationTokenSource();
+        monitorTask = Task.Run(() => MonitorRobloxAudioAsync(monitorCancellationTokenSource.Token));
+    }
+
+    private void AttachRuleEvents(IEnumerable<ReplacementRule> rules)
+    {
+        foreach (var rule in rules)
+        {
+            AttachRuleEvents(rule);
+        }
+    }
+
+    private void AttachRuleEvents(ReplacementRule rule)
+    {
+        rule.PropertyChanged -= OnRulePropertyChanged;
+        rule.PropertyChanged += OnRulePropertyChanged;
+    }
+
+    private void DetachRuleEvents(ReplacementRule rule)
+    {
+        rule.PropertyChanged -= OnRulePropertyChanged;
+    }
+
+    private async Task MonitorRobloxAudioAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(750));
+
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            var sessions = sessionService.GetRobloxSessions();
+            var devices = deviceService.GetRenderDevices();
+            await ApplySnapshotAsync(devices, sessions);
+            await ProcessRobloxAssetSignalsAsync();
+
+            lock (monitorStateLock)
+            {
+                lastRobloxAudioActivityState = sessions.Any(session => session.HasAudibleActivity);
+            }
+        }
+    }
+
+    private async Task ApplySnapshotAsync(
+        IReadOnlyList<AudioDeviceInfo> devices,
+        IReadOnlyList<RobloxAudioSessionInfo> sessions)
+    {
+        var currentIdentifiers = sessions
+            .Select(session => session.SessionIdentifier)
+            .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int openedCount;
+        int closedCount;
+
+        lock (monitorStateLock)
+        {
+            openedCount = currentIdentifiers.Except(lastSessionIdentifiers, StringComparer.OrdinalIgnoreCase).Count();
+            closedCount = lastSessionIdentifiers.Except(currentIdentifiers, StringComparer.OrdinalIgnoreCase).Count();
+            lastSessionIdentifiers = currentIdentifiers;
+        }
+
+        await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            RenderDevices = new ObservableCollection<AudioDeviceInfo>(devices);
+
+            var preferredDeviceId = selectedOutputDeviceId ?? settings.PreferredOutputDeviceId;
+            var resolvedSelection = !string.IsNullOrWhiteSpace(preferredDeviceId)
+                ? RenderDevices.FirstOrDefault(device =>
+                    string.Equals(device.Id, preferredDeviceId, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            resolvedSelection ??= RenderDevices.FirstOrDefault(device => device.IsDefault) ?? RenderDevices.FirstOrDefault();
+
+            SelectedOutputDevice = resolvedSelection;
+            selectedOutputDeviceId = resolvedSelection?.Id;
+            settings.PreferredOutputDeviceId = selectedOutputDeviceId;
+
+            RobloxSessions = new ObservableCollection<RobloxAudioSessionInfo>(sessions);
+
+            SessionStatusText = sessions.Count switch
+            {
+                0 => "No active Roblox session detected",
+                _ when sessions.Any(session => session.HasAudibleActivity) => $"{sessions.Count} Roblox session(s) active, audio playing",
+                _ => $"{sessions.Count} Roblox session(s) active",
+            };
+
+            OnPropertyChanged(nameof(RobloxSessionCount));
+            OnPropertyChanged(nameof(RuleCount));
+        });
+
+        if (openedCount > 0)
+        {
+            AddActivity("Monitor", openedCount == 1
+                ? "A Roblox session opened."
+                : $"{openedCount} Roblox sessions opened.");
+        }
+
+        if (closedCount > 0)
+        {
+            AddActivity("Monitor", closedCount == 1
+                ? "A Roblox session closed."
+                : $"{closedCount} Roblox sessions closed.");
+        }
+    }
+
+    private async Task ProcessRobloxAssetSignalsAsync()
+    {
+        var resolvedAssets = playerLogService.PollResolvedAssets();
+        foreach (var resolution in resolvedAssets)
+        {
+            await HandleResolvedAssetAsync(resolution);
+        }
+
+        var cacheChanges = soundCacheService.PollCacheChanges();
+        if (cacheChanges.Count > 0)
+        {
+            await UpdateCachedSoundFilesAsync();
+        }
+
+        foreach (var cacheEntry in cacheChanges)
+        {
+            await HandleCacheEntryAsync(cacheEntry);
+        }
+    }
+
+    private async Task HandleResolvedAssetAsync(RobloxAssetResolutionInfo resolution)
+    {
+        AddActivity("Log", $"Roblox resolved asset {resolution.AssetId}.");
+
+        if (AutoApplyCacheReplacements)
+        {
+            await ApplyPreparedCacheReplacementsAsync($"log asset {resolution.AssetId}", resolution.AssetId);
+        }
+    }
+
+    private async Task HandleCacheEntryAsync(RobloxSoundCacheEntry cacheEntry)
+    {
+        AddActivity("Cache", $"Roblox sound cache updated: {cacheEntry.FileName}");
+
+        if (AutoApplyCacheReplacements)
+        {
+            await TryApplyPreparedReplacementToCacheEntryAsync(cacheEntry, "cache refresh");
+        }
+    }
+
+    private async Task StartOrStopProxyAsync(bool forceStart)
+    {
+        if (forceStart)
+        {
+            try
+            {
+                proxyService.UpdateRules(Rules);
+                var status = await proxyService.StartAsync(ProxyPort, EnableExperimentalProxyReplacement);
+                IsProxyRunning = status.IsRunning;
+                EnableProxyFallback = status.IsRunning;
+                AddActivity("Replace", "Background Roblox asset watch is running.");
+            }
+            catch (Exception exception)
+            {
+                var detailedMessage = exception.InnerException is null
+                    ? exception.Message
+                    : $"{exception.Message} Inner error: {exception.InnerException.Message}";
+
+                IsProxyRunning = false;
+                EnableProxyFallback = false;
+                sessionService.SetMute(false);
+                robloxMuted = false;
+                RobloxMuteStatus = "Live";
+                AddActivity("Replace", $"Background Roblox asset watch could not start: {detailedMessage}");
+            }
+        }
+        else
+        {
+            var status = await proxyService.StopAsync();
+            IsProxyRunning = status.IsRunning;
+            EnableProxyFallback = false;
+            AddActivity("Replace", "Background Roblox asset watch stopped.");
+        }
+    }
+
+    private async void OnAssetDetected(object? sender, ProxyAssetDetectedEventArgs eventArgs)
+    {
+        var matchedRule = Rules.FirstOrDefault(rule =>
+            rule.IsEnabled
+            && !string.IsNullOrWhiteSpace(rule.FilePath)
+            && File.Exists(rule.FilePath)
+            && RuleMatcher.Matches(rule.AssetIdPattern, eventArgs.AssetId));
+
+        if (matchedRule is null)
+        {
+            AddActivity("Detection", $"Proxy saw asset {eventArgs.AssetId}, but no enabled local rule matched it.");
+            return;
+        }
+
+        AddActivity("Detection", $"Matched asset {eventArgs.AssetId} to {matchedRule.Name}; re-checking cache.");
+
+        if (AutoApplyCacheReplacements)
+        {
+            await ApplyPreparedCacheReplacementsAsync($"proxy match {eventArgs.AssetId}", eventArgs.AssetId);
+        }
+    }
+
+    private async Task PlayRuleAsync(ReplacementRule rule, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(rule.FilePath) || !File.Exists(rule.FilePath))
+        {
+            AddActivity("Playback", $"Skipped {rule.Name} because the file path is missing.");
+            return;
+        }
+
+        await playbackLock.WaitAsync();
+        var mutedForThisPlayback = false;
+        try
+        {
+            playbackService.ValidatePlayback(rule.FilePath, SelectedOutputDevice?.Id);
+
+            if (AutoMuteRobloxDuringPlayback)
+            {
+                sessionService.SetMute(true);
+                robloxMuted = true;
+                RobloxMuteStatus = "Muted";
+                mutedForThisPlayback = true;
+            }
+
+            AddActivity("Playback", $"Playing {rule.Name} for {reason}.");
+            await playbackService.PlayAsync(
+                rule.FilePath,
+                SelectedOutputDevice?.Id,
+                Math.Clamp(rule.GainPercent / 100f, 0f, 1f));
+        }
+        catch (Exception exception)
+        {
+            if (mutedForThisPlayback)
+            {
+                sessionService.SetMute(false);
+                robloxMuted = false;
+                RobloxMuteStatus = "Live";
+            }
+
+            AddActivity("Playback", $"Playback failed for {rule.Name}: {exception.Message}");
+        }
+        finally
+        {
+            if (mutedForThisPlayback && AutoRestoreRobloxAfterPlayback)
+            {
+                sessionService.SetMute(false);
+                robloxMuted = false;
+                RobloxMuteStatus = "Live";
+            }
+
+            playbackLock.Release();
+            await RefreshAsync();
+        }
+    }
+
+    private void AddActivity(string category, string message)
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Activity.Insert(0, new ActivityLogEntry
+            {
+                Category = category,
+                Message = message,
+                Timestamp = DateTimeOffset.Now,
+            });
+
+            while (Activity.Count > 40)
+            {
+                Activity.RemoveAt(Activity.Count - 1);
+            }
+        });
+    }
+
+    partial void OnSelectedOutputDeviceChanged(AudioDeviceInfo? value)
+    {
+        selectedOutputDeviceId = value?.Id;
+        settings.PreferredOutputDeviceId = selectedOutputDeviceId;
+        OnPropertyChanged(nameof(SelectedOutputDeviceName));
+    }
+
+    private void OnProxyRequestObserved(object? sender, ProxyRequestObservedEventArgs eventArgs)
+    {
+        if (eventArgs.IsAssetDeliveryRequest)
+        {
+            if (AutoApplyCacheReplacements && !string.IsNullOrWhiteSpace(eventArgs.AssetId))
+            {
+                _ = Task.Run(() => ApplyPreparedCacheReplacementsAsync("assetdelivery re-check", eventArgs.AssetId));
+            }
+
+            AddActivity("Replace", BuildProxyActivityMessage(eventArgs));
+        }
+    }
+
+    private static string BuildProxyActivityMessage(ProxyRequestObservedEventArgs eventArgs)
+    {
+        if (string.IsNullOrWhiteSpace(eventArgs.AssetId))
+        {
+            return $"Saw an assetdelivery request at {eventArgs.Host}, but no asset ID was parsed.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(eventArgs.MatchedRuleName))
+        {
+            return $"Asset {eventArgs.AssetId} matched {eventArgs.MatchedRuleName}; checking Roblox's local sound cache.";
+        }
+
+        return $"Asset {eventArgs.AssetId} was requested, but no prepared rule matched it.";
+    }
+
+    private async Task UpdateCachedSoundFilesAsync()
+    {
+        var snapshot = soundCacheService.GetSoundCacheSnapshot();
+        var cacheRulesChanged = HandleRuleCachePresence(snapshot);
+        var annotated = snapshot
+            .Select(AnnotateCacheEntry)
+            .ToList();
+
+        await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            CachedSoundFiles = new ObservableCollection<RobloxSoundCacheEntry>(annotated);
+        });
+
+        if (cacheRulesChanged)
+        {
+            await SaveConfigurationAsync(logActivity: false);
+        }
+    }
+
+    private RobloxSoundCacheEntry AnnotateCacheEntry(RobloxSoundCacheEntry entry)
+    {
+        var preparedMatch = Rules.FirstOrDefault(rule =>
+            rule.IsEnabled
+            && !string.IsNullOrWhiteSpace(rule.SourceAssetHash)
+            && string.Equals(rule.SourceAssetHash, entry.Sha256, StringComparison.OrdinalIgnoreCase));
+
+        if (preparedMatch is not null)
+        {
+            return new RobloxSoundCacheEntry
+            {
+                FileName = entry.FileName,
+                FullPath = entry.FullPath,
+                Length = entry.Length,
+                LastWriteTime = entry.LastWriteTime,
+                Sha256 = entry.Sha256,
+                MatchedRuleName = preparedMatch.Name,
+                MatchedAssetId = TryGetExactAssetId(preparedMatch.AssetIdPattern) ?? preparedMatch.AssetIdPattern,
+                MatchedSourceAssetLength = preparedMatch.SourceAssetLength,
+                MatchedReplacementFileLength = preparedMatch.ReplacementFileLength,
+                StatusText = "Match ready",
+            };
+        }
+
+        var replacedMatch = Rules.FirstOrDefault(rule =>
+            rule.IsEnabled
+            && !string.IsNullOrWhiteSpace(rule.ReplacementFileHash)
+            && string.Equals(rule.ReplacementFileHash, entry.Sha256, StringComparison.OrdinalIgnoreCase));
+
+        if (replacedMatch is not null)
+        {
+            return new RobloxSoundCacheEntry
+            {
+                FileName = entry.FileName,
+                FullPath = entry.FullPath,
+                Length = entry.Length,
+                LastWriteTime = entry.LastWriteTime,
+                Sha256 = entry.Sha256,
+                MatchedRuleName = replacedMatch.Name,
+                MatchedAssetId = TryGetExactAssetId(replacedMatch.AssetIdPattern) ?? replacedMatch.AssetIdPattern,
+                MatchedSourceAssetLength = replacedMatch.SourceAssetLength,
+                MatchedReplacementFileLength = replacedMatch.ReplacementFileLength,
+                StatusText = "Replaced",
+            };
+        }
+
+        return new RobloxSoundCacheEntry
+        {
+            FileName = entry.FileName,
+            FullPath = entry.FullPath,
+            Length = entry.Length,
+            LastWriteTime = entry.LastWriteTime,
+            Sha256 = entry.Sha256,
+            StatusText = "Original",
+        };
+    }
+
+    private async Task ApplyPreparedCacheReplacementsAsync(string reason, string? specificAssetId = null)
+    {
+        var snapshot = soundCacheService.GetSoundCacheSnapshot();
+        var preparedRules = Rules
+            .Where(rule =>
+                rule.IsEnabled
+                && !string.IsNullOrWhiteSpace(rule.SourceAssetHash)
+                && !string.IsNullOrWhiteSpace(rule.ReplacementFileHash)
+                && !string.IsNullOrWhiteSpace(rule.FilePath)
+                && File.Exists(rule.FilePath))
+            .Where(rule => string.IsNullOrWhiteSpace(specificAssetId)
+                || string.Equals(TryGetExactAssetId(rule.AssetIdPattern), specificAssetId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (preparedRules.Count == 0)
+        {
+            return;
+        }
+
+        var replacementsApplied = 0;
+        foreach (var cacheEntry in snapshot)
+        {
+            var matchedRule = preparedRules.FirstOrDefault(rule =>
+                string.Equals(rule.SourceAssetHash, cacheEntry.Sha256, StringComparison.OrdinalIgnoreCase));
+
+            if (matchedRule is null)
+            {
+                continue;
+            }
+
+            var applied = await TryApplyPreparedReplacementToCacheEntryAsync(cacheEntry, reason);
+            if (applied)
+            {
+                replacementsApplied++;
+            }
+        }
+
+        await UpdateCachedSoundFilesAsync();
+
+        if (replacementsApplied == 0 && string.Equals(reason, "manual apply", StringComparison.OrdinalIgnoreCase))
+        {
+            AddActivity("Cache", "Manual apply found no prepared cached sounds to replace.");
+            LogManualApplySizeDetails(snapshot, preparedRules);
+        }
+    }
+
+    private async Task<int> RestoreRuleToOriginalAsync(ReplacementRule rule, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(rule.ReplacementFileHash))
+        {
+            return 0;
+        }
+
+        var snapshot = soundCacheService.GetSoundCacheSnapshot();
+        var restoredCount = 0;
+
+        foreach (var cacheEntry in snapshot.Where(entry =>
+                     string.Equals(entry.Sha256, rule.ReplacementFileHash, StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!soundCacheService.RestoreSoundFile(cacheEntry.FullPath))
+            {
+                AddActivity("Cache", $"Skipped restoring {cacheEntry.FileName} because Roblox is still using it.");
+                continue;
+            }
+
+            restoredCount++;
+            AddActivity("Cache", $"Restored {cacheEntry.FileName} back to Roblox original for {rule.Name} ({reason}).");
+        }
+
+        return restoredCount;
+    }
+
+    private async Task<bool> TryApplyPreparedReplacementToCacheEntryAsync(RobloxSoundCacheEntry cacheEntry, string reason)
+    {
+        var matchedRule = Rules.FirstOrDefault(rule =>
+            rule.IsEnabled
+            && !string.IsNullOrWhiteSpace(rule.SourceAssetHash)
+            && !string.IsNullOrWhiteSpace(rule.ReplacementFileHash)
+            && !string.IsNullOrWhiteSpace(rule.FilePath)
+            && File.Exists(rule.FilePath)
+            && string.Equals(rule.SourceAssetHash, cacheEntry.Sha256, StringComparison.OrdinalIgnoreCase));
+
+        if (matchedRule is null)
+        {
+            return false;
+        }
+
+        if (string.Equals(cacheEntry.Sha256, matchedRule.ReplacementFileHash, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!CanOverwriteCacheFile(cacheEntry.FullPath))
+        {
+            AddActivity("Cache", $"Skipped {cacheEntry.FileName} because Roblox appears to be using it already.");
+            return false;
+        }
+
+        if (!soundCacheService.ReplaceSoundFile(cacheEntry.FullPath, matchedRule.FilePath))
+        {
+            AddActivity("Cache", $"Skipped {cacheEntry.FileName} because it became busy while trying to replace it.");
+            return false;
+        }
+
+        AddActivity(
+            "Cache",
+            $"Replaced {cacheEntry.FileName} using {matchedRule.Name} for asset {TryGetExactAssetId(matchedRule.AssetIdPattern) ?? matchedRule.AssetIdPattern} ({reason}).");
+        await UpdateCachedSoundFilesAsync();
+        return true;
+    }
+
+    private void OnRulePropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (sender is not ReplacementRule rule)
+        {
+            return;
+        }
+
+        if (string.Equals(eventArgs.PropertyName, nameof(ReplacementRule.AssetIdPattern), StringComparison.Ordinal)
+            || string.Equals(eventArgs.PropertyName, nameof(ReplacementRule.FilePath), StringComparison.Ordinal))
+        {
+            InvalidatePreparedState(rule);
+        }
+    }
+
+    private async Task<bool> EnsureRulePreparedAsync(ReplacementRule rule, bool logSkipMessage)
+    {
+        var assetId = TryGetExactAssetId(rule.AssetIdPattern);
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            AddActivity("Prepare", $"Skipped {rule.Name} because the asset pattern is not a single exact asset ID.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(rule.FilePath) || !File.Exists(rule.FilePath))
+        {
+            AddActivity("Prepare", $"Skipped {rule.Name} because the replacement file is missing.");
+            return false;
+        }
+
+        if (IsRulePrepared(rule))
+        {
+            if (logSkipMessage)
+            {
+                AddActivity("Prepare", $"Skipped {rule.Name} because it is already prepared.");
+            }
+
+            return true;
+        }
+
+        try
+        {
+            var downloadedAsset = await assetDownloadService.DownloadAssetInfoAsync(assetId);
+            var replacementFileInfo = new FileInfo(rule.FilePath);
+            rule.SourceAssetHash = downloadedAsset.Sha256;
+            rule.SourceAssetLength = downloadedAsset.Length;
+            rule.ReplacementFileHash = soundCacheService.ComputeFileHash(rule.FilePath);
+            rule.ReplacementFileLength = replacementFileInfo.Length;
+            rule.PreparedAt = DateTimeOffset.Now;
+            rule.PreparationVersion = ReplacementRule.LatestPreparationVersion;
+
+            AddActivity(
+                "Prepare",
+                $"Prepared {rule.Name} for asset {assetId}. Original download: {FormatKilobytes(downloadedAsset.Length)}. Replacement file: {FormatKilobytes(replacementFileInfo.Length)}.");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            AddActivity("Prepare", $"Failed to prepare {rule.Name}: {exception.Message}");
+            return false;
+        }
+    }
+
+    private static bool IsRulePrepared(ReplacementRule rule)
+    {
+        return rule.IsPrepared
+            && !string.IsNullOrWhiteSpace(rule.FilePath)
+            && File.Exists(rule.FilePath);
+    }
+
+    private static bool CanOverwriteCacheFile(string filePath)
+    {
+        try
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static void InvalidatePreparedState(ReplacementRule rule)
+    {
+        rule.SourceAssetHash = string.Empty;
+        rule.SourceAssetLength = 0;
+        rule.ReplacementFileHash = string.Empty;
+        rule.ReplacementFileLength = File.Exists(rule.FilePath)
+            ? new FileInfo(rule.FilePath).Length
+            : 0;
+        rule.PreparedAt = null;
+        rule.PreparationVersion = 0;
+    }
+
+    private bool HandleRuleCachePresence(IReadOnlyList<RobloxSoundCacheEntry> snapshot)
+    {
+        var anyRuleChanged = false;
+
+        foreach (var rule in Rules)
+        {
+            if (!rule.IsEnabled || !IsRulePrepared(rule))
+            {
+                observedCacheRules.Remove(rule);
+                continue;
+            }
+
+            var cacheIsPresent = snapshot.Any(entry =>
+                string.Equals(entry.Sha256, rule.SourceAssetHash, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(entry.Sha256, rule.ReplacementFileHash, StringComparison.OrdinalIgnoreCase));
+
+            if (cacheIsPresent)
+            {
+                observedCacheRules.Add(rule);
+                continue;
+            }
+
+            if (!observedCacheRules.Remove(rule))
+            {
+                continue;
+            }
+
+            rule.IsEnabled = false;
+            InvalidatePreparedState(rule);
+            anyRuleChanged = true;
+            AddActivity("Cache", $"Disabled {rule.Name} because its Roblox cache file was removed.");
+        }
+
+        return anyRuleChanged;
+    }
+
+    private static string? TryGetExactAssetId(string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            return null;
+        }
+
+        var trimmedPattern = pattern.Trim();
+        if (trimmedPattern.StartsWith("rbxassetid://", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmedPattern = trimmedPattern["rbxassetid://".Length..];
+        }
+
+        return trimmedPattern.All(char.IsDigit) ? trimmedPattern : null;
+    }
+
+    private void LogManualApplySizeDetails(
+        IReadOnlyList<RobloxSoundCacheEntry> snapshot,
+        IReadOnlyList<ReplacementRule> preparedRules)
+    {
+        if (preparedRules.Count == 0)
+        {
+            AddActivity("Cache", "There are no prepared rules with both a source hash and a replacement file.");
+            return;
+        }
+
+        foreach (var rule in preparedRules)
+        {
+            var assetId = TryGetExactAssetId(rule.AssetIdPattern) ?? rule.AssetIdPattern;
+            AddActivity(
+                "Cache",
+                $"Prepared rule {rule.Name} for asset {assetId}: original {FormatKilobytes(rule.SourceAssetLength)}, replacement {FormatKilobytes(rule.ReplacementFileLength)}.");
+        }
+
+        if (snapshot.Count == 0)
+        {
+            AddActivity("Cache", "Roblox sound cache is empty right now, so there was nothing to compare.");
+            return;
+        }
+
+        var cacheSummary = string.Join(
+            ", ",
+            snapshot
+                .Take(8)
+                .Select(entry => $"{entry.FileName}={FormatKilobytes(entry.Length)}"));
+
+        AddActivity(
+            "Cache",
+            $"Scanned {snapshot.Count} cached sound file(s). Current sizes: {cacheSummary}{(snapshot.Count > 8 ? ", ..." : string.Empty)}");
+    }
+
+    private static string FormatKilobytes(long bytes) => bytes <= 0 ? "-" : $"{bytes / 1024d:N1} KB";
+
+    partial void OnAutoApplyCacheReplacementsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ReplacementModeText));
+
+        if (!initializationComplete)
+        {
+            return;
+        }
+
+        _ = Task.Run(() => HandleAutoApplyCacheReplacementsChangedAsync(value));
+    }
+
+    private async Task HandleAutoApplyCacheReplacementsChangedAsync(bool value)
+    {
+        try
+        {
+            if (value)
+            {
+                await StartOrStopProxyAsync(forceStart: true);
+            }
+            else if (IsProxyRunning)
+            {
+                await StartOrStopProxyAsync(forceStart: false);
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine(exception);
+            AddActivity("Replace", $"Could not update background asset watch: {exception.Message}");
+        }
+    }
+}

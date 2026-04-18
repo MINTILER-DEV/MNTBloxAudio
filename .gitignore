@@ -1,0 +1,5 @@
+[Bb]in/
+[Oo]bj/
+artifacts/
+publish/
+buildproj.bat

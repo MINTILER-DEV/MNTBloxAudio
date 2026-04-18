@@ -1,0 +1,376 @@
+<Window x:Class="MNTBloxAudio.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:core="clr-namespace:MNTBloxAudio.Core.Models;assembly=MNTBloxAudio.Core"
+        mc:Ignorable="d"
+        Title="MNTBloxAudio"
+        Width="1180"
+        Height="820"
+        MinWidth="860"
+        MinHeight="620"
+        Background="{StaticResource WindowBrush}"
+        FontFamily="Segoe UI Variable Text"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock FontSize="28"
+                       FontWeight="SemiBold"
+                       Text="MNTBloxAudio" />
+            <TextBlock Margin="0,6,0,0"
+                       Foreground="{StaticResource MutedTextBrush}"
+                       Text="Minimal local Roblox audio replacement. Enable a rule, choose a file, and save once to apply it."
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Margin="0,18,0,18"
+                Style="{StaticResource CardBorderStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                               Text="Roblox sessions" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Text="{Binding RobloxSessionCount}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1">
+                    <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                               Text="Rules" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Text="{Binding RuleCount}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                    <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                               Text="Mode" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Text="{Binding ReplacementModeText}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="Rules">
+                <Grid Margin="18">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.15*" />
+                        <ColumnDefinition Width="0.85*" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Grid.ColumnSpan="2"
+                               Margin="0,0,0,16"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               Text="Enabled rules replace the local Roblox cache. Disabled rules leave the original audio alone."
+                               TextWrapping="Wrap" />
+
+                    <Border Grid.Row="1"
+                            Grid.Column="0"
+                            Margin="0,0,18,0"
+                            Style="{StaticResource CardBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <DockPanel Grid.Row="0"
+                                       Margin="0,0,0,12">
+                                <TextBlock DockPanel.Dock="Left"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="Rules" />
+
+                                <WrapPanel DockPanel.Dock="Right"
+                                           HorizontalAlignment="Right">
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Add"
+                                            Command="{Binding AddRuleCommand}" />
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Apply All"
+                                            Command="{Binding ApplyAllRulesCommand}" />
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Remove"
+                                            Command="{Binding RemoveSelectedRuleCommand}" />
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Refresh"
+                                            Command="{Binding RefreshCommand}" />
+                                </WrapPanel>
+                            </DockPanel>
+
+                            <DataGrid Grid.Row="1"
+                                      ItemsSource="{Binding Rules}"
+                                      SelectedItem="{Binding SelectedRule}"
+                                      AutoGenerateColumns="False"
+                                      CanUserAddRows="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal"
+                                      BorderThickness="0"
+                                      RowBackground="White"
+                                      AlternatingRowBackground="#FAFBFC">
+                                <DataGrid.Columns>
+                                    <DataGridCheckBoxColumn Header="On"
+                                                            Binding="{Binding IsEnabled}"
+                                                            Width="56" />
+                                    <DataGridTextColumn Header="Rule"
+                                                        Binding="{Binding Name}"
+                                                        Width="1.1*" />
+                                    <DataGridTextColumn Header="Asset ID"
+                                                        Binding="{Binding AssetIdPattern}"
+                                                        Width="1.1*" />
+                                    <DataGridTextColumn Header="File"
+                                                        Binding="{Binding FileNameDisplay}"
+                                                        Width="1.4*" />
+                                    <DataGridTextColumn Header="State"
+                                                        Binding="{Binding StatusDisplay}"
+                                                        Width="100" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="1"
+                            Grid.Column="1"
+                            Style="{StaticResource CardBorderStyle}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="Selected Rule" />
+                                <TextBlock Margin="0,6,0,16"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="One button handles this rule. If it is enabled, the app prepares it and applies the cache replacement. If it is disabled, the app keeps Roblox's original audio."
+                                           TextWrapping="Wrap" />
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Name" />
+                                <TextBox Text="{Binding SelectedRule.Name, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Exact Roblox asset ID" />
+                                <TextBox Text="{Binding SelectedRule.AssetIdPattern, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Replacement file" />
+                                <DockPanel LastChildFill="True">
+                                    <Button DockPanel.Dock="Right"
+                                            Margin="12,0,0,0"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Browse File"
+                                            Command="{Binding BrowseSelectedRuleCommand}" />
+                                    <TextBox Text="{Binding SelectedRule.FilePath, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+
+                                <CheckBox Margin="0,14,0,0"
+                                          IsChecked="{Binding SelectedRule.IsEnabled}"
+                                          Content="Enable replacement for this rule" />
+
+                                <UniformGrid Margin="0,16,0,16"
+                                             Columns="2">
+                                    <Border Margin="0,0,8,0"
+                                            Padding="12"
+                                            CornerRadius="12"
+                                            Background="#F7F8FA"
+                                            BorderBrush="{StaticResource CardBorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                                       Text="Roblox source" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding SelectedRule.SourceAssetSizeDisplay, Mode=OneWay}" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Text="{Binding SelectedRule.StatusDisplay, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Margin="8,0,0,0"
+                                            Padding="12"
+                                            CornerRadius="12"
+                                            Background="#F7F8FA"
+                                            BorderBrush="{StaticResource CardBorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                                       Text="Replacement file" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding SelectedRule.ReplacementFileSizeDisplay, Mode=OneWay}" />
+                                            <TextBlock Margin="0,4,0,0"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Text="{Binding SelectedRule.FileNameDisplay, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+
+                                <Button Content="Save + Apply Rule"
+                                        Command="{Binding SaveAndApplySelectedRuleCommand}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Advanced">
+                <Grid Margin="18">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="1.15*" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0"
+                            Margin="0,0,0,18"
+                            Style="{StaticResource CardBorderStyle}">
+                        <DockPanel LastChildFill="False">
+                            <StackPanel DockPanel.Dock="Left">
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="Advanced" />
+                                <TextBlock Margin="0,6,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Use this tab for background re-checks, cache inspection, and activity logs."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <WrapPanel DockPanel.Dock="Right"
+                                       HorizontalAlignment="Right">
+                                <CheckBox VerticalAlignment="Center"
+                                          IsChecked="{Binding AutoApplyCacheReplacements}"
+                                          Content="Auto-apply on re-fetch" />
+                                <Button Style="{StaticResource SubtleButtonStyle}"
+                                        Content="Apply All"
+                                        Command="{Binding ApplyAllRulesCommand}" />
+                                <Button Style="{StaticResource SubtleButtonStyle}"
+                                        Content="Prepare Enabled"
+                                        Command="{Binding PrepareRuleAssetsCommand}" />
+                                <Button Style="{StaticResource SubtleButtonStyle}"
+                                        Content="Refresh Cache"
+                                        Command="{Binding RefreshCommand}" />
+                                <Button Content="Save"
+                                        Command="{Binding SaveConfigurationCommand}" />
+                            </WrapPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <Border Grid.Row="1"
+                            Margin="0,0,0,18"
+                            Style="{StaticResource CardBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="Cached Sounds" />
+
+                            <DataGrid Grid.Row="1"
+                                      Margin="0,14,0,0"
+                                      ItemsSource="{Binding CachedSoundFiles}"
+                                      AutoGenerateColumns="False"
+                                      CanUserAddRows="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal"
+                                      BorderThickness="0"
+                                      RowBackground="White"
+                                      AlternatingRowBackground="#FAFBFC">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="File"
+                                                        Binding="{Binding FileName}"
+                                                        Width="1.5*" />
+                                    <DataGridTextColumn Header="Cache KB"
+                                                        Binding="{Binding LengthDisplay}"
+                                                        Width="100" />
+                                    <DataGridTextColumn Header="Asset ID"
+                                                        Binding="{Binding MatchedAssetId}"
+                                                        Width="120" />
+                                    <DataGridTextColumn Header="Rule"
+                                                        Binding="{Binding MatchedRuleName}"
+                                                        Width="1.1*" />
+                                    <DataGridTextColumn Header="State"
+                                                        Binding="{Binding StatusText}"
+                                                        Width="100" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="2"
+                            Style="{StaticResource CardBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="Activity" />
+
+                            <ListBox Grid.Row="1"
+                                     Margin="0,14,0,0"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     ItemsSource="{Binding Activity}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type core:ActivityLogEntry}">
+                                        <Border Margin="0,0,0,8"
+                                                Padding="10"
+                                                CornerRadius="10"
+                                                Background="#FAFBFC"
+                                                BorderBrush="{StaticResource CardBorderBrush}"
+                                                BorderThickness="1">
+                                            <DockPanel>
+                                                <TextBlock DockPanel.Dock="Left"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding Category}" />
+                                                <TextBlock DockPanel.Dock="Right"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="{Binding Timestamp, StringFormat={}{0:hh:mm:ss tt}}" />
+                                                <TextBlock Margin="0,22,0,0"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           TextWrapping="Wrap"
+                                                           Text="{Binding Message}" />
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>
