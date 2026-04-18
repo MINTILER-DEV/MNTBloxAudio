@@ -177,7 +177,7 @@
                                 <TextBox Text="{Binding SelectedRule.AssetIdPattern, UpdateSourceTrigger=PropertyChanged}" />
 
                                 <TextBlock Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Replacement file" />
+                                           Text="Replacement file or URL" />
                                 <DockPanel LastChildFill="True">
                                     <Button DockPanel.Dock="Right"
                                             Margin="12,0,0,0"
@@ -219,7 +219,7 @@
                                             BorderThickness="1">
                                         <StackPanel>
                                             <TextBlock Foreground="{StaticResource MutedTextBrush}"
-                                                       Text="Replacement file" />
+                                                       Text="Replacement source" />
                                             <TextBlock Margin="0,4,0,0"
                                                        FontWeight="SemiBold"
                                                        Text="{Binding SelectedRule.ReplacementFileSizeDisplay, Mode=OneWay}" />

@@ -7,9 +7,9 @@ The app watches Roblox's local sound cache in `%TEMP%\Roblox\sounds`, matches ca
 ## How it works
 
 1. Create a rule with an exact Roblox asset ID.
-2. Pick a local replacement file.
+2. Pick a local replacement file or paste a direct `http/https` URL.
 3. Save and apply the rule.
-4. The app downloads the original Roblox asset for that ID, hashes it, and remembers the replacement file hash.
+4. The app downloads the original Roblox asset for that ID, resolves your replacement source to a local file, and remembers the replacement hash.
 5. When Roblox has the matching sound cached locally, the app replaces that cached `RBX...` file with your local file.
 
 Important behavior:
@@ -25,7 +25,7 @@ The app is intentionally split into two tabs:
 
 - `Rules`
   - Main workflow
-  - Add a rule, set the Roblox asset ID, browse for a replacement file, enable or disable the rule, then use `Save + Apply Rule`
+  - Add a rule, set the Roblox asset ID, choose a replacement file or paste a URL, enable or disable the rule, then use `Save + Apply Rule`
   - `Apply All` prepares and applies every enabled rule
 - `Advanced`
   - Cached sound list
@@ -39,7 +39,7 @@ For one rule:
 1. Open `Rules`
 2. Click `Add`
 3. Enter the exact Roblox asset ID
-4. Click `Browse File`
+4. Click `Browse File` or paste a URL into the replacement source box
 5. Enable the rule
 6. Click `Save + Apply Rule`
 
@@ -104,7 +104,7 @@ dotnet publish ".\MNTBloxAudio.App\MNTBloxAudio.App.csproj" -c Release -r win-x6
 
 - Make sure the rule uses the exact Roblox asset ID
 - Make sure the rule is enabled
-- Make sure the replacement file still exists
+- Make sure the replacement file still exists, or that the replacement URL is still reachable
 - Make sure Roblox has already downloaded that sound into `%TEMP%\Roblox\sounds`
 - Check the `Advanced` tab and compare the cached sound state against your rule
 

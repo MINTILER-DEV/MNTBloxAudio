@@ -123,8 +123,8 @@ public sealed class ReplacementRule : INotifyPropertyChanged
 
     [JsonIgnore]
     public string FileNameDisplay => string.IsNullOrWhiteSpace(FilePath)
-        ? "No file"
-        : Path.GetFileName(FilePath);
+        ? "No source"
+        : TryGetRemoteDisplayName(FilePath);
 
     [JsonIgnore]
     public string StatusDisplay => !IsEnabled
@@ -153,6 +153,19 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     }
 
     private static string FormatKilobytes(long bytes) => bytes <= 0 ? "-" : $"{bytes / 1024d:N1} KB";
+
+    private static string TryGetRemoteDisplayName(string source)
+    {
+        if (Uri.TryCreate(source, UriKind.Absolute, out var uri)
+            && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            var name = Path.GetFileName(uri.AbsolutePath);
+            return string.IsNullOrWhiteSpace(name) ? uri.Host : name;
+        }
+
+        return Path.GetFileName(source);
+    }
 
     private void NotifyDerivedProperties(string? propertyName)
     {

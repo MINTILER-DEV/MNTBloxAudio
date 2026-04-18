@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject
     private readonly RobloxPlayerLogService playerLogService;
     private readonly RobloxSoundCacheService soundCacheService;
     private readonly RobloxAssetDownloadService assetDownloadService;
+    private readonly ReplacementSourceService replacementSourceService;
     private readonly Lock monitorStateLock = new();
     private readonly HashSet<ReplacementRule> observedCacheRules = [];
 
@@ -105,7 +106,8 @@ public partial class MainViewModel : ObservableObject
         ProxyFallbackService proxyService,
         RobloxPlayerLogService playerLogService,
         RobloxSoundCacheService soundCacheService,
-        RobloxAssetDownloadService assetDownloadService)
+        RobloxAssetDownloadService assetDownloadService,
+        ReplacementSourceService replacementSourceService)
     {
         this.settingsStore = settingsStore;
         this.deviceService = deviceService;
@@ -115,6 +117,7 @@ public partial class MainViewModel : ObservableObject
         this.playerLogService = playerLogService;
         this.soundCacheService = soundCacheService;
         this.assetDownloadService = assetDownloadService;
+        this.replacementSourceService = replacementSourceService;
 
         proxyService.AssetDetected += OnAssetDetected;
         proxyService.RequestObserved += OnProxyRequestObserved;
@@ -295,7 +298,7 @@ public partial class MainViewModel : ObservableObject
             SelectedRule.ReplacementFileHash = string.Empty;
             SelectedRule = SelectedRule;
             OnPropertyChanged(nameof(SelectedRule));
-            AddActivity("Rules", $"Attached file to {SelectedRule.Name}: {Path.GetFileName(dialog.FileName)}");
+            AddActivity("Rules", $"Attached source to {SelectedRule.Name}: {Path.GetFileName(dialog.FileName)}");
             await SaveConfigurationAsync();
         }
     }
@@ -689,8 +692,7 @@ public partial class MainViewModel : ObservableObject
     {
         var matchedRule = Rules.FirstOrDefault(rule =>
             rule.IsEnabled
-            && !string.IsNullOrWhiteSpace(rule.FilePath)
-            && File.Exists(rule.FilePath)
+            && HasReplacementSource(rule)
             && RuleMatcher.Matches(rule.AssetIdPattern, eventArgs.AssetId));
 
         if (matchedRule is null)
@@ -709,9 +711,10 @@ public partial class MainViewModel : ObservableObject
 
     private async Task PlayRuleAsync(ReplacementRule rule, string reason)
     {
-        if (string.IsNullOrWhiteSpace(rule.FilePath) || !File.Exists(rule.FilePath))
+        var replacementSource = await ResolveReplacementSourceAsync(rule, forceRefreshRemote: false);
+        if (replacementSource is null)
         {
-            AddActivity("Playback", $"Skipped {rule.Name} because the file path is missing.");
+            AddActivity("Playback", $"Skipped {rule.Name} because the replacement source could not be resolved.");
             return;
         }
 
@@ -719,7 +722,7 @@ public partial class MainViewModel : ObservableObject
         var mutedForThisPlayback = false;
         try
         {
-            playbackService.ValidatePlayback(rule.FilePath, SelectedOutputDevice?.Id);
+            playbackService.ValidatePlayback(replacementSource.LocalPath, SelectedOutputDevice?.Id);
 
             if (AutoMuteRobloxDuringPlayback)
             {
@@ -731,7 +734,7 @@ public partial class MainViewModel : ObservableObject
 
             AddActivity("Playback", $"Playing {rule.Name} for {reason}.");
             await playbackService.PlayAsync(
-                rule.FilePath,
+                replacementSource.LocalPath,
                 SelectedOutputDevice?.Id,
                 Math.Clamp(rule.GainPercent / 100f, 0f, 1f));
         }
@@ -897,8 +900,7 @@ public partial class MainViewModel : ObservableObject
                 rule.IsEnabled
                 && !string.IsNullOrWhiteSpace(rule.SourceAssetHash)
                 && !string.IsNullOrWhiteSpace(rule.ReplacementFileHash)
-                && !string.IsNullOrWhiteSpace(rule.FilePath)
-                && File.Exists(rule.FilePath))
+                && HasReplacementSource(rule))
             .Where(rule => string.IsNullOrWhiteSpace(specificAssetId)
                 || string.Equals(TryGetExactAssetId(rule.AssetIdPattern), specificAssetId, StringComparison.OrdinalIgnoreCase))
             .ToList();
@@ -967,8 +969,7 @@ public partial class MainViewModel : ObservableObject
             rule.IsEnabled
             && !string.IsNullOrWhiteSpace(rule.SourceAssetHash)
             && !string.IsNullOrWhiteSpace(rule.ReplacementFileHash)
-            && !string.IsNullOrWhiteSpace(rule.FilePath)
-            && File.Exists(rule.FilePath)
+            && HasReplacementSource(rule)
             && string.Equals(rule.SourceAssetHash, cacheEntry.Sha256, StringComparison.OrdinalIgnoreCase));
 
         if (matchedRule is null)
@@ -987,7 +988,14 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
 
-        if (!soundCacheService.ReplaceSoundFile(cacheEntry.FullPath, matchedRule.FilePath))
+        var replacementSource = await ResolveReplacementSourceAsync(matchedRule, forceRefreshRemote: false);
+        if (replacementSource is null)
+        {
+            AddActivity("Cache", $"Skipped {matchedRule.Name} because its replacement source could not be resolved.");
+            return false;
+        }
+
+        if (!soundCacheService.ReplaceSoundFile(cacheEntry.FullPath, replacementSource.LocalPath))
         {
             AddActivity("Cache", $"Skipped {cacheEntry.FileName} because it became busy while trying to replace it.");
             return false;
@@ -1023,9 +1031,9 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(rule.FilePath) || !File.Exists(rule.FilePath))
+        if (!HasReplacementSource(rule))
         {
-            AddActivity("Prepare", $"Skipped {rule.Name} because the replacement file is missing.");
+            AddActivity("Prepare", $"Skipped {rule.Name} because the replacement source is missing.");
             return false;
         }
 
@@ -1041,18 +1049,24 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
+            var replacementSource = await ResolveReplacementSourceAsync(rule, forceRefreshRemote: true);
+            if (replacementSource is null)
+            {
+                AddActivity("Prepare", $"Failed to prepare {rule.Name}: could not download or open the replacement source.");
+                return false;
+            }
+
             var downloadedAsset = await assetDownloadService.DownloadAssetInfoAsync(assetId);
-            var replacementFileInfo = new FileInfo(rule.FilePath);
             rule.SourceAssetHash = downloadedAsset.Sha256;
             rule.SourceAssetLength = downloadedAsset.Length;
-            rule.ReplacementFileHash = soundCacheService.ComputeFileHash(rule.FilePath);
-            rule.ReplacementFileLength = replacementFileInfo.Length;
+            rule.ReplacementFileHash = soundCacheService.ComputeFileHash(replacementSource.LocalPath);
+            rule.ReplacementFileLength = replacementSource.Length;
             rule.PreparedAt = DateTimeOffset.Now;
             rule.PreparationVersion = ReplacementRule.LatestPreparationVersion;
 
             AddActivity(
                 "Prepare",
-                $"Prepared {rule.Name} for asset {assetId}. Original download: {FormatKilobytes(downloadedAsset.Length)}. Replacement file: {FormatKilobytes(replacementFileInfo.Length)}.");
+                $"Prepared {rule.Name} for asset {assetId}. Original download: {FormatKilobytes(downloadedAsset.Length)}. Replacement source: {FormatKilobytes(replacementSource.Length)}.");
             return true;
         }
         catch (Exception exception)
@@ -1064,9 +1078,7 @@ public partial class MainViewModel : ObservableObject
 
     private static bool IsRulePrepared(ReplacementRule rule)
     {
-        return rule.IsPrepared
-            && !string.IsNullOrWhiteSpace(rule.FilePath)
-            && File.Exists(rule.FilePath);
+        return rule.IsPrepared && HasReplacementSource(rule);
     }
 
     private static bool CanOverwriteCacheFile(string filePath)
@@ -1091,11 +1103,40 @@ public partial class MainViewModel : ObservableObject
         rule.SourceAssetHash = string.Empty;
         rule.SourceAssetLength = 0;
         rule.ReplacementFileHash = string.Empty;
-        rule.ReplacementFileLength = File.Exists(rule.FilePath)
+        rule.ReplacementFileLength = !string.IsNullOrWhiteSpace(rule.FilePath)
+            && !IsRemoteReplacementSource(rule.FilePath)
+            && File.Exists(rule.FilePath)
             ? new FileInfo(rule.FilePath).Length
             : 0;
         rule.PreparedAt = null;
         rule.PreparationVersion = 0;
+    }
+
+    private async Task<ResolvedReplacementSource?> ResolveReplacementSourceAsync(ReplacementRule rule, bool forceRefreshRemote)
+    {
+        if (string.IsNullOrWhiteSpace(rule.FilePath))
+        {
+            return null;
+        }
+
+        return await replacementSourceService.ResolveAsync(rule.FilePath, forceRefreshRemote);
+    }
+
+    private static bool HasReplacementSource(ReplacementRule rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule.FilePath))
+        {
+            return false;
+        }
+
+        return IsRemoteReplacementSource(rule.FilePath) || File.Exists(rule.FilePath);
+    }
+
+    private static bool IsRemoteReplacementSource(string? source)
+    {
+        return Uri.TryCreate(source, UriKind.Absolute, out var uri)
+            && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool HandleRuleCachePresence(IReadOnlyList<RobloxSoundCacheEntry> snapshot)
@@ -1165,7 +1206,7 @@ public partial class MainViewModel : ObservableObject
             var assetId = TryGetExactAssetId(rule.AssetIdPattern) ?? rule.AssetIdPattern;
             AddActivity(
                 "Cache",
-                $"Prepared rule {rule.Name} for asset {assetId}: original {FormatKilobytes(rule.SourceAssetLength)}, replacement {FormatKilobytes(rule.ReplacementFileLength)}.");
+                $"Prepared rule {rule.Name} for asset {assetId}: original {FormatKilobytes(rule.SourceAssetLength)}, replacement source {FormatKilobytes(rule.ReplacementFileLength)}.");
         }
 
         if (snapshot.Count == 0)

@@ -20,6 +20,7 @@ public partial class App : Application
         var playerLogService = new RobloxPlayerLogService();
         var soundCacheService = new RobloxSoundCacheService();
         var assetDownloadService = new RobloxAssetDownloadService();
+        var replacementSourceService = new ReplacementSourceService();
 
         viewModel = new MainViewModel(
             settingsStore,
@@ -29,7 +30,8 @@ public partial class App : Application
             proxyService,
             playerLogService,
             soundCacheService,
-            assetDownloadService);
+            assetDownloadService,
+            replacementSourceService);
 
         var window = new MainWindow(viewModel);
         MainWindow = window;
