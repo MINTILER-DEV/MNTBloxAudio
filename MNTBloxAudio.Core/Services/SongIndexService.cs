@@ -6,6 +6,11 @@ namespace MNTBloxAudio.Core.Services;
 
 public sealed class SongIndexService
 {
+    private static readonly System.Text.Json.JsonSerializerOptions JsonSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     private static readonly HttpClient HttpClient = new(new HttpClientHandler
     {
         AllowAutoRedirect = true,
@@ -49,6 +54,33 @@ public sealed class SongIndexService
         return match is null ? null : NormalizeUrls(match, configuredBaseUrl);
     }
 
+    public async Task<IReadOnlyList<SongIndexEntry>> SearchSongsAsync(
+        string? query,
+        string? configuredBaseUrl = null,
+        CancellationToken cancellationToken = default)
+    {
+        var document = await LoadIndexAsync(configuredBaseUrl, cancellationToken).ConfigureAwait(false);
+        var normalizedQuery = (query ?? string.Empty).Trim();
+
+        var normalizedSongs = document.Songs
+            .Select(entry => NormalizeUrls(entry, configuredBaseUrl))
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(normalizedQuery))
+        {
+            return normalizedSongs
+                .OrderByDescending(entry => entry.UploadedAt ?? DateTimeOffset.MinValue)
+                .ThenBy(entry => entry.SongName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return normalizedSongs
+            .Where(entry => MatchesSearch(entry, normalizedQuery))
+            .OrderByDescending(entry => entry.UploadedAt ?? DateTimeOffset.MinValue)
+            .ThenBy(entry => entry.SongName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public async Task<UploadedSongRecord> SubmitSongLinkAsync(
         string audioUrl,
         string songName,
@@ -80,7 +112,7 @@ public sealed class SongIndexService
             throw new InvalidOperationException(ExtractErrorMessage(body) ?? "Upload request failed.");
         }
 
-        var uploadedEntry = System.Text.Json.JsonSerializer.Deserialize<SongIndexEntry>(body);
+        var uploadedEntry = System.Text.Json.JsonSerializer.Deserialize<SongIndexEntry>(body, JsonSerializerOptions);
         if (uploadedEntry is null)
         {
             throw new InvalidOperationException("Upload succeeded but the response body was empty.");
@@ -164,6 +196,20 @@ public sealed class SongIndexService
     }
 
     private static string NormalizeSongCode(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
+
+    private static bool MatchesSearch(SongIndexEntry entry, string query)
+    {
+        return Contains(entry.Code, query)
+            || Contains(entry.SongName, query)
+            || Contains(entry.Artist, query)
+            || Contains(entry.UploaderName, query)
+            || Contains(entry.AudioUrl, query);
+    }
+
+    private static bool Contains(string? value, string query)
+    {
+        return value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+    }
 
     private static string? ExtractErrorMessage(string? json)
     {

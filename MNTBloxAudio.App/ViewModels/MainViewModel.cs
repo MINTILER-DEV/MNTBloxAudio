@@ -58,6 +58,9 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<UploadedSongRecord> uploadedSongs = [];
 
     [ObservableProperty]
+    private ObservableCollection<SongIndexEntry> songSearchResults = [];
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedOutputDeviceName))]
     private AudioDeviceInfo? selectedOutputDevice;
 
@@ -66,6 +69,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private UploadedSongRecord? selectedUploadedSong;
+
+    [ObservableProperty]
+    private SongIndexEntry? selectedSongSearchResult;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OutputVolumeLabel))]
@@ -112,6 +118,9 @@ public partial class MainViewModel : ObservableObject
     private string songIndexBaseUrl = string.Empty;
 
     [ObservableProperty]
+    private bool useDarkMode;
+
+    [ObservableProperty]
     private string uploadSongName = string.Empty;
 
     [ObservableProperty]
@@ -125,6 +134,21 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private string uploadStatusText = "Link submissions are ready once a live API exists.";
+
+    [ObservableProperty]
+    private Uri? previewAudioSource;
+
+    [ObservableProperty]
+    private string previewHeading = "No preview loaded";
+
+    [ObservableProperty]
+    private string previewStatusText = "Paste a direct audio URL or choose one of your uploads to hear a preview.";
+
+    [ObservableProperty]
+    private string songSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private string songSearchStatusText = "Search songs from the public index API.";
 
     public MainViewModel(
         SettingsStore settingsStore,
@@ -167,6 +191,8 @@ public partial class MainViewModel : ObservableObject
 
     public string SongIndexSiteUrl => songIndexService.GetSiteBaseUrl(SongIndexBaseUrl);
 
+    public bool HasPreviewAudio => PreviewAudioSource is not null;
+
     public async Task InitializeAsync()
     {
         sessionService.SetMute(false);
@@ -193,6 +219,7 @@ public partial class MainViewModel : ObservableObject
             ? songIndexService.GetDefaultSiteBaseUrl()
             : settings.SongIndexBaseUrl;
         settings.SongIndexBaseUrl = SongIndexBaseUrl;
+        UseDarkMode = settings.UseDarkMode;
 
         Rules = new ObservableCollection<ReplacementRule>(settings.Rules.Select(rule => new ReplacementRule
         {
@@ -211,16 +238,19 @@ public partial class MainViewModel : ObservableObject
         }));
         AttachRuleEvents(Rules);
 
-        UploadedSongs = new ObservableCollection<UploadedSongRecord>(settings.UploadedSongs.Select(song => new UploadedSongRecord
-        {
-            Code = song.Code,
-            SongName = song.SongName,
-            Artist = song.Artist,
-            UploaderName = song.UploaderName,
-            UploadedByDeviceId = song.UploadedByDeviceId,
-            AudioUrl = song.AudioUrl,
-            UploadedAt = song.UploadedAt,
-        }));
+        UploadedSongs = new ObservableCollection<UploadedSongRecord>(settings.UploadedSongs
+            .Where(IsValidUploadedSong)
+            .Select(song => new UploadedSongRecord
+            {
+                Code = song.Code,
+                SongName = song.SongName,
+                Artist = song.Artist,
+                UploaderName = song.UploaderName,
+                UploadedByDeviceId = song.UploadedByDeviceId,
+                AudioUrl = song.AudioUrl,
+                UploadedAt = song.UploadedAt,
+            }));
+        var removedInvalidUploadedSongs = settings.UploadedSongs.Count != UploadedSongs.Count;
 
         SelectedRule = Rules.FirstOrDefault();
         SelectedUploadedSong = UploadedSongs.FirstOrDefault();
@@ -248,6 +278,12 @@ public partial class MainViewModel : ObservableObject
         StartRobloxAudioMonitor();
         initializationComplete = true;
         AddActivity("Startup", "App initialized in cache replacement mode.");
+
+        if (removedInvalidUploadedSongs)
+        {
+            await SaveConfigurationAsync(logActivity: false);
+            AddActivity("Upload", "Removed broken saved upload entries from local settings.");
+        }
     }
 
     public async Task ShutdownAsync()
@@ -370,6 +406,42 @@ public partial class MainViewModel : ObservableObject
         AddActivity("Upload", "Copied this device ID to the clipboard.");
     }
 
+    [RelayCommand(CanExecute = nameof(CanPreviewTypedAudio))]
+    private async Task PreviewTypedAudioAsync()
+    {
+        await BeginPreviewAsync(
+            UploadAudioUrl,
+            string.IsNullOrWhiteSpace(UploadSongName)
+                ? "Typed audio URL"
+                : $"{UploadSongName} - {UploadArtist}".Trim(' ', '-'));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanPreviewSelectedUpload))]
+    private async Task PreviewSelectedUploadAsync()
+    {
+        if (SelectedUploadedSong is null)
+        {
+            return;
+        }
+
+        if (!IsValidUploadedSong(SelectedUploadedSong))
+        {
+            PreviewStatusText = "That saved upload is missing song metadata or a valid direct audio URL.";
+            return;
+        }
+
+        await BeginPreviewAsync(SelectedUploadedSong.AudioUrl, SelectedUploadedSong.SummaryDisplay);
+    }
+
+    [RelayCommand]
+    private void StopPreview()
+    {
+        PreviewAudioSource = null;
+        PreviewHeading = "No preview loaded";
+        PreviewStatusText = "Preview stopped.";
+        OnPropertyChanged(nameof(HasPreviewAudio));
+    }
+
     [RelayCommand]
     private async Task UploadAudioAsync()
     {
@@ -465,6 +537,93 @@ public partial class MainViewModel : ObservableObject
             UploadStatusText = exception.Message;
             AddActivity("Upload", $"Delete failed: {exception.Message}");
         }
+    }
+
+    [RelayCommand]
+    private async Task SearchSongsAsync()
+    {
+        try
+        {
+            SongSearchStatusText = "Loading songs from the index API...";
+            var results = await songIndexService.SearchSongsAsync(SongSearchQuery, SongIndexBaseUrl);
+
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                SongSearchResults = new ObservableCollection<SongIndexEntry>(results);
+                SelectedSongSearchResult = SongSearchResults.FirstOrDefault();
+            });
+
+            SongSearchStatusText = results.Count == 0
+                ? "No songs matched that search."
+                : $"Loaded {results.Count} song{(results.Count == 1 ? string.Empty : "s")} from the index API.";
+            AddActivity("Songs", string.IsNullOrWhiteSpace(SongSearchQuery)
+                ? $"Loaded {results.Count} song result(s) from the index API."
+                : $"Found {results.Count} song result(s) for \"{SongSearchQuery.Trim()}\".");
+        }
+        catch (Exception exception)
+        {
+            SongSearchStatusText = exception.Message;
+            AddActivity("Songs", $"Song search failed: {exception.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadAllSongsAsync()
+    {
+        SongSearchQuery = string.Empty;
+        await SearchSongsAsync();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanPreviewSelectedSongSearchResult))]
+    private async Task PreviewSelectedSongSearchResultAsync()
+    {
+        if (SelectedSongSearchResult is null)
+        {
+            return;
+        }
+
+        await BeginPreviewAsync(
+            SelectedSongSearchResult.AudioUrl,
+            $"{SelectedSongSearchResult.SongName} - {SelectedSongSearchResult.Artist}".Trim(' ', '-'));
+    }
+
+    [RelayCommand]
+    private void CopySelectedSongCode()
+    {
+        if (SelectedSongSearchResult is null)
+        {
+            return;
+        }
+
+        Clipboard.SetText(SelectedSongSearchResult.Code);
+        SongSearchStatusText = $"Copied {SelectedSongSearchResult.Code}.";
+        AddActivity("Songs", $"Copied song code {SelectedSongSearchResult.Code}.");
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUseSelectedSongCode))]
+    private async Task UseSelectedSongCodeAsync()
+    {
+        if (SelectedSongSearchResult is null)
+        {
+            return;
+        }
+
+        await EnsureSelectedRuleAsync();
+        if (SelectedRule is null)
+        {
+            SongSearchStatusText = "Could not create or select a rule.";
+            return;
+        }
+
+        SelectedRule.FilePath = SelectedSongSearchResult.Code;
+        SelectedRule.ReplacementFileHash = string.Empty;
+        SelectedRule.ReplacementFileLength = 0;
+        SelectedRule = SelectedRule;
+        OnPropertyChanged(nameof(SelectedRule));
+
+        SongSearchStatusText = $"Set {SelectedRule.Name} to use song code {SelectedSongSearchResult.Code}.";
+        AddActivity("Songs", $"Applied song code {SelectedSongSearchResult.Code} to {SelectedRule.Name}.");
+        await SaveConfigurationAsync(logActivity: false);
     }
 
     [RelayCommand]
@@ -671,6 +830,7 @@ public partial class MainViewModel : ObservableObject
     {
         settings.DeviceId = DeviceId;
         settings.SongIndexBaseUrl = SongIndexBaseUrl;
+        settings.UseDarkMode = UseDarkMode;
         settings.PreferredOutputDeviceId = selectedOutputDeviceId ?? SelectedOutputDevice?.Id;
         settings.OutputVolumePercent = OutputVolumePercent;
         settings.AutoReplaceOnRobloxAudioActivity = false;
@@ -696,16 +856,18 @@ public partial class MainViewModel : ObservableObject
             PreparationVersion = rule.PreparationVersion,
             ReplacementSourceWasConverted = rule.ReplacementSourceWasConverted,
         }).ToList();
-        settings.UploadedSongs = UploadedSongs.Select(song => new UploadedSongRecord
-        {
-            Code = song.Code,
-            SongName = song.SongName,
-            Artist = song.Artist,
-            UploaderName = song.UploaderName,
-            UploadedByDeviceId = song.UploadedByDeviceId,
-            AudioUrl = song.AudioUrl,
-            UploadedAt = song.UploadedAt,
-        }).ToList();
+        settings.UploadedSongs = UploadedSongs
+            .Where(IsValidUploadedSong)
+            .Select(song => new UploadedSongRecord
+            {
+                Code = song.Code,
+                SongName = song.SongName,
+                Artist = song.Artist,
+                UploaderName = song.UploaderName,
+                UploadedByDeviceId = song.UploadedByDeviceId,
+                AudioUrl = song.AudioUrl,
+                UploadedAt = song.UploadedAt,
+            }).ToList();
 
         await settingsStore.SaveAsync(settings);
         proxyService.UpdateRules(Rules);
@@ -1490,9 +1652,60 @@ public partial class MainViewModel : ObservableObject
         return Convert.ToHexString(Guid.NewGuid().ToByteArray()).Replace("-", string.Empty, StringComparison.Ordinal);
     }
 
+    public void HandlePreviewPlaybackStarted()
+    {
+        PreviewStatusText = $"Playing {PreviewHeading}.";
+    }
+
+    public void HandlePreviewPlaybackFinished()
+    {
+        if (PreviewAudioSource is null)
+        {
+            return;
+        }
+
+        PreviewStatusText = $"Preview finished for {PreviewHeading}.";
+    }
+
+    public void HandlePreviewPlaybackFailed(string? detail)
+    {
+        PreviewAudioSource = null;
+        PreviewStatusText = string.IsNullOrWhiteSpace(detail)
+            ? "Preview could not be played."
+            : $"Preview could not be played: {detail}";
+        OnPropertyChanged(nameof(HasPreviewAudio));
+    }
+
     partial void OnSongIndexBaseUrlChanged(string value)
     {
         OnPropertyChanged(nameof(SongIndexSiteUrl));
+        SongSearchStatusText = "Song index base URL changed. Search again to refresh results.";
+    }
+
+    partial void OnUseDarkModeChanged(bool value)
+    {
+        (Application.Current as App)?.ApplyTheme(value);
+    }
+
+    partial void OnUploadAudioUrlChanged(string value)
+    {
+        PreviewTypedAudioCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedUploadedSongChanged(UploadedSongRecord? value)
+    {
+        PreviewSelectedUploadCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedSongSearchResultChanged(SongIndexEntry? value)
+    {
+        PreviewSelectedSongSearchResultCommand.NotifyCanExecuteChanged();
+        UseSelectedSongCodeCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnPreviewAudioSourceChanged(Uri? value)
+    {
+        OnPropertyChanged(nameof(HasPreviewAudio));
     }
 
     partial void OnAutoApplyCacheReplacementsChanged(bool value)
@@ -1525,5 +1738,52 @@ public partial class MainViewModel : ObservableObject
             Debug.WriteLine(exception);
             AddActivity("Replace", $"Could not update background asset watch: {exception.Message}");
         }
+    }
+
+    private bool CanPreviewTypedAudio()
+    {
+        return !string.IsNullOrWhiteSpace(UploadAudioUrl);
+    }
+
+    private bool CanPreviewSelectedUpload()
+    {
+        return IsValidUploadedSong(SelectedUploadedSong);
+    }
+
+    private bool CanPreviewSelectedSongSearchResult()
+    {
+        return SelectedSongSearchResult is not null && !string.IsNullOrWhiteSpace(SelectedSongSearchResult.AudioUrl);
+    }
+
+    private bool CanUseSelectedSongCode()
+    {
+        return SelectedSongSearchResult is not null;
+    }
+
+    private async Task BeginPreviewAsync(string? source, string label)
+    {
+        var resolvedSource = await ResolveSourceReferenceAsync(source ?? string.Empty);
+        if (!Uri.TryCreate(resolvedSource, UriKind.Absolute, out var previewUri))
+        {
+            PreviewStatusText = "Preview needs a valid direct audio URL.";
+            return;
+        }
+
+        PreviewAudioSource = null;
+        PreviewHeading = string.IsNullOrWhiteSpace(label) ? previewUri.Host : label;
+        PreviewStatusText = $"Loading preview for {PreviewHeading}...";
+        await Task.Delay(40);
+        PreviewAudioSource = previewUri;
+    }
+
+    private static bool IsValidUploadedSong(UploadedSongRecord? song)
+    {
+        return song is not null
+            && !string.IsNullOrWhiteSpace(song.Code)
+            && !string.IsNullOrWhiteSpace(song.SongName)
+            && !string.IsNullOrWhiteSpace(song.Artist)
+            && Uri.TryCreate(song.AudioUrl, UriKind.Absolute, out var uri)
+            && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
     }
 }

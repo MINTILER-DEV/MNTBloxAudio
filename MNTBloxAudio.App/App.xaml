@@ -5,6 +5,9 @@
         <SolidColorBrush x:Key="WindowBrush" Color="#F7F8FA" />
         <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="CardBorderBrush" Color="#E6E8EC" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#F7F8FA" />
+        <SolidColorBrush x:Key="SurfaceAltBrush" Color="#FAFBFC" />
+        <SolidColorBrush x:Key="InputBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="TextBrush" Color="#171A21" />
         <SolidColorBrush x:Key="MutedTextBrush" Color="#6B7280" />
         <SolidColorBrush x:Key="AccentBrush" Color="#4B5563" />
@@ -21,6 +24,11 @@
 
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+
+        <Style TargetType="Window">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Background" Value="{StaticResource WindowBrush}" />
         </Style>
 
         <Style TargetType="Button">
@@ -78,15 +86,59 @@
             <Setter Property="Margin" Value="0,0,0,12" />
             <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Background" Value="White" />
+            <Setter Property="Background" Value="{StaticResource InputBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         </Style>
 
         <Style TargetType="ComboBox">
             <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Background" Value="{StaticResource InputBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
         </Style>
 
         <Style TargetType="CheckBox">
             <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="{StaticResource WindowBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Background" Value="{StaticResource CardBrush}" />
+        </Style>
+
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="{StaticResource CardBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource CardBorderBrush}" />
+            <Setter Property="VerticalGridLinesBrush" Value="{StaticResource CardBorderBrush}" />
+            <Setter Property="RowBackground" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="AlternatingRowBackground" Value="{StaticResource SurfaceAltBrush}" />
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="8,6" />
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         </Style>
     </Application.Resources>
 </Application>

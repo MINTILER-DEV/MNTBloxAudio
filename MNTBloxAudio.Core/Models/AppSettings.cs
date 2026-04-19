@@ -10,6 +10,8 @@ public sealed class AppSettings
 
     public string SongIndexBaseUrl { get; set; } = string.Empty;
 
+    public bool UseDarkMode { get; set; }
+
     public bool AutoReplaceOnRobloxAudioActivity { get; set; }
 
     public bool AutoReplaceOnDetection { get; set; } = true;

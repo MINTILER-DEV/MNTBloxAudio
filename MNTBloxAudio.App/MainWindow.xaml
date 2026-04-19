@@ -20,6 +20,17 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <MediaElement x:Name="PreviewPlayer"
+                      Width="0"
+                      Height="0"
+                      Opacity="0"
+                      LoadedBehavior="Play"
+                      UnloadedBehavior="Stop"
+                      Source="{Binding PreviewAudioSource}"
+                      MediaOpened="PreviewPlayer_OnMediaOpened"
+                      MediaEnded="PreviewPlayer_OnMediaEnded"
+                      MediaFailed="PreviewPlayer_OnMediaFailed" />
+
         <StackPanel Grid.Row="0">
             <TextBlock FontSize="28"
                        FontWeight="SemiBold"
@@ -130,9 +141,7 @@
                                       CanUserAddRows="False"
                                       HeadersVisibility="Column"
                                       GridLinesVisibility="Horizontal"
-                                      BorderThickness="0"
-                                      RowBackground="White"
-                                      AlternatingRowBackground="#FAFBFC">
+                                      BorderThickness="0">
                                 <DataGrid.Columns>
                                     <DataGridCheckBoxColumn Header="On"
                                                             Binding="{Binding IsEnabled}"
@@ -196,7 +205,7 @@
                                     <Border Margin="0,0,8,0"
                                             Padding="12"
                                             CornerRadius="12"
-                                            Background="#F7F8FA"
+                                            Background="{StaticResource SurfaceBrush}"
                                             BorderBrush="{StaticResource CardBorderBrush}"
                                             BorderThickness="1">
                                         <StackPanel>
@@ -214,7 +223,7 @@
                                     <Border Margin="8,0,0,0"
                                             Padding="12"
                                             CornerRadius="12"
-                                            Background="#F7F8FA"
+                                            Background="{StaticResource SurfaceBrush}"
                                             BorderBrush="{StaticResource CardBorderBrush}"
                                             BorderThickness="1">
                                         <StackPanel>
@@ -235,8 +244,13 @@
                                     </Border>
                                 </UniformGrid>
 
-                                <Button Content="Save + Apply Rule"
-                                        Command="{Binding SaveAndApplySelectedRuleCommand}" />
+                                <WrapPanel>
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Preview Rule"
+                                            Command="{Binding PlaySelectedRuleCommand}" />
+                                    <Button Content="Save + Apply Rule"
+                                            Command="{Binding SaveAndApplySelectedRuleCommand}" />
+                                </WrapPanel>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
@@ -266,7 +280,7 @@
 
                                 <Border Padding="12"
                                         CornerRadius="12"
-                                        Background="#F7F8FA"
+                                        Background="{StaticResource SurfaceBrush}"
                                         BorderBrush="{StaticResource CardBorderBrush}"
                                         BorderThickness="1">
                                     <StackPanel>
@@ -310,7 +324,7 @@
                                 <Border Margin="0,16,0,0"
                                         Padding="12"
                                         CornerRadius="12"
-                                        Background="#F7F8FA"
+                                        Background="{StaticResource SurfaceBrush}"
                                         BorderBrush="{StaticResource CardBorderBrush}"
                                         BorderThickness="1">
                                     <TextBlock Foreground="{StaticResource MutedTextBrush}"
@@ -332,6 +346,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
                             <StackPanel>
@@ -340,7 +355,7 @@
                                            Text="My Submissions" />
                                 <TextBlock Margin="0,6,0,0"
                                            Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Only songs submitted by this device ID can be deleted from here."
+                                               Text="Only songs submitted by this device ID can be deleted from here."
                                            TextWrapping="Wrap" />
                             </StackPanel>
 
@@ -356,7 +371,7 @@
                                         <Border Margin="0,0,0,8"
                                                 Padding="10"
                                                 CornerRadius="10"
-                                                Background="#FAFBFC"
+                                                Background="{StaticResource SurfaceAltBrush}"
                                                 BorderBrush="{StaticResource CardBorderBrush}"
                                                 BorderThickness="1">
                                             <StackPanel>
@@ -375,9 +390,217 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <Button Grid.Row="2"
-                                    Content="Delete Selected Upload"
-                                    Command="{Binding DeleteSelectedUploadCommand}" />
+                            <Border Grid.Row="2"
+                                    Margin="0,0,0,14"
+                                    Padding="12"
+                                    CornerRadius="12"
+                                    Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold"
+                                               Text="{Binding PreviewHeading}" />
+                                    <TextBlock Margin="0,4,0,10"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding PreviewStatusText}"
+                                               TextWrapping="Wrap" />
+                                    <WrapPanel>
+                                        <Button Style="{StaticResource SubtleButtonStyle}"
+                                                Content="Preview Typed URL"
+                                                Command="{Binding PreviewTypedAudioCommand}" />
+                                        <Button Style="{StaticResource SubtleButtonStyle}"
+                                                Content="Play Selected Upload"
+                                                Command="{Binding PreviewSelectedUploadCommand}" />
+                                        <Button Content="Stop Preview"
+                                                Command="{Binding StopPreviewCommand}" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <WrapPanel Grid.Row="3">
+                                <Button Content="Delete Selected Upload"
+                                        Command="{Binding DeleteSelectedUploadCommand}" />
+                            </WrapPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Songs">
+                <Grid Margin="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="0.95*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Margin="0,0,18,0"
+                            Style="{StaticResource CardBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="Song Search" />
+                                <TextBlock Margin="0,6,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="This tab searches the song index directly through the API. No browser view is used here."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Border Grid.Row="1"
+                                    Margin="0,14,0,14"
+                                    Style="{StaticResource CardBorderStyle}">
+                                <DockPanel LastChildFill="True">
+                                    <WrapPanel DockPanel.Dock="Right"
+                                               Margin="12,0,0,0">
+                                        <Button Style="{StaticResource SubtleButtonStyle}"
+                                                Content="All Songs"
+                                                Command="{Binding LoadAllSongsCommand}" />
+                                        <Button Content="Search"
+                                                Command="{Binding SearchSongsCommand}" />
+                                    </WrapPanel>
+                                    <TextBox Margin="0"
+                                             Text="{Binding SongSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                            </Border>
+
+                            <Grid Grid.Row="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="{Binding SongSearchStatusText}"
+                                           TextWrapping="Wrap" />
+
+                                <ListBox Grid.Row="1"
+                                         Margin="0,14,0,0"
+                                         ItemsSource="{Binding SongSearchResults}"
+                                         SelectedItem="{Binding SelectedSongSearchResult}"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type core:SongIndexEntry}">
+                                            <Border Margin="0,0,0,8"
+                                                    Padding="10"
+                                                    CornerRadius="10"
+                                                    Background="{StaticResource SurfaceAltBrush}"
+                                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                                    BorderThickness="1">
+                                                <StackPanel>
+                                                    <DockPanel LastChildFill="False">
+                                                        <TextBlock DockPanel.Dock="Left"
+                                                                   FontWeight="SemiBold"
+                                                                   Text="{Binding SongName}" />
+                                                        <TextBlock DockPanel.Dock="Right"
+                                                                   Foreground="{StaticResource MutedTextBrush}"
+                                                                   Text="{Binding Code}" />
+                                                    </DockPanel>
+                                                    <TextBlock Margin="0,4,0,0"
+                                                               Foreground="{StaticResource MutedTextBrush}"
+                                                               Text="{Binding Artist}" />
+                                                    <TextBlock Margin="0,2,0,0"
+                                                               Foreground="{StaticResource MutedTextBrush}"
+                                                               Text="{Binding UploaderName}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="1"
+                            Style="{StaticResource CardBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="Selected Song" />
+                                <TextBlock Margin="0,6,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Preview the selected song, copy its code, or assign that code to the selected rule."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Border Grid.Row="1"
+                                    Margin="0,14,0,14"
+                                    Padding="12"
+                                    CornerRadius="12"
+                                    Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold"
+                                               Text="{Binding SelectedSongSearchResult.SongName, TargetNullValue=No song selected}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding SelectedSongSearchResult.Artist, TargetNullValue=Search to load songs from the API}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding SelectedSongSearchResult.Code}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding SelectedSongSearchResult.UploaderName}" />
+                                    <TextBlock Margin="0,8,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding SelectedSongSearchResult.AudioUrl}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Row="2"
+                                    Margin="0,0,0,14"
+                                    Padding="12"
+                                    CornerRadius="12"
+                                    Background="{StaticResource SurfaceBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold"
+                                               Text="{Binding PreviewHeading}" />
+                                    <TextBlock Margin="0,4,0,10"
+                                               Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding PreviewStatusText}"
+                                               TextWrapping="Wrap" />
+                                    <WrapPanel>
+                                        <Button Style="{StaticResource SubtleButtonStyle}"
+                                                Content="Play Song"
+                                                Command="{Binding PreviewSelectedSongSearchResultCommand}" />
+                                        <Button Style="{StaticResource SubtleButtonStyle}"
+                                                Content="Copy Code"
+                                                Command="{Binding CopySelectedSongCodeCommand}" />
+                                        <Button Style="{StaticResource SubtleButtonStyle}"
+                                                Content="Stop Preview"
+                                                Command="{Binding StopPreviewCommand}" />
+                                        <Button Content="Use Code In Rule"
+                                                Command="{Binding UseSelectedSongCodeCommand}" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Grid.Row="3">
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Tip: after using a code in a rule, the rule source can stay as the 6-letter code and the app will resolve it through the index API when needed."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </Grid>
@@ -407,6 +630,9 @@
 
                             <WrapPanel DockPanel.Dock="Right"
                                        HorizontalAlignment="Right">
+                                <CheckBox VerticalAlignment="Center"
+                                          IsChecked="{Binding UseDarkMode}"
+                                          Content="Dark mode" />
                                 <CheckBox VerticalAlignment="Center"
                                           IsChecked="{Binding AutoApplyCacheReplacements}"
                                           Content="Auto-apply on re-fetch" />
@@ -445,9 +671,7 @@
                                       CanUserAddRows="False"
                                       HeadersVisibility="Column"
                                       GridLinesVisibility="Horizontal"
-                                      BorderThickness="0"
-                                      RowBackground="White"
-                                      AlternatingRowBackground="#FAFBFC">
+                                      BorderThickness="0">
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="File"
                                                         Binding="{Binding FileName}"
@@ -493,7 +717,7 @@
                                         <Border Margin="0,0,0,8"
                                                 Padding="10"
                                                 CornerRadius="10"
-                                                Background="#FAFBFC"
+                                                Background="{StaticResource SurfaceAltBrush}"
                                                 BorderBrush="{StaticResource CardBorderBrush}"
                                                 BorderThickness="1">
                                             <DockPanel>
