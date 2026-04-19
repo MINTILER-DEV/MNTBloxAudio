@@ -131,12 +131,25 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     [JsonIgnore]
     public string FileNameDisplay => string.IsNullOrWhiteSpace(FilePath)
         ? "No source"
+        : LooksLikeSongCode(FilePath)
+            ? $"Code {FilePath.Trim().ToUpperInvariant()}"
         : TryGetRemoteDisplayName(FilePath);
 
     [JsonIgnore]
-    public string ReplacementSourceNoteDisplay => ReplacementSourceWasConverted
-        ? "Auto-converted to MP3"
-        : string.Empty;
+    public string ReplacementSourceNoteDisplay
+    {
+        get
+        {
+            if (LooksLikeSongCode(FilePath))
+            {
+                return "Resolved from song code";
+            }
+
+            return ReplacementSourceWasConverted
+                ? "Auto-converted to MP3"
+                : string.Empty;
+        }
+    }
 
     [JsonIgnore]
     public string StatusDisplay => !IsEnabled
@@ -165,6 +178,17 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     }
 
     private static string FormatKilobytes(long bytes) => bytes <= 0 ? "-" : $"{bytes / 1024d:N1} KB";
+
+    private static bool LooksLikeSongCode(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return false;
+        }
+
+        var trimmed = source.Trim();
+        return trimmed.Length == 6 && trimmed.All(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z');
+    }
 
     private static string TryGetRemoteDisplayName(string source)
     {

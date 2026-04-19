@@ -177,7 +177,7 @@
                                 <TextBox Text="{Binding SelectedRule.AssetIdPattern, UpdateSourceTrigger=PropertyChanged}" />
 
                                 <TextBlock Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Replacement file or URL" />
+                                           Text="Replacement file, URL, or 6-letter song code" />
                                 <DockPanel LastChildFill="True">
                                     <Button DockPanel.Dock="Right"
                                             Margin="12,0,0,0"
@@ -239,6 +239,147 @@
                                         Command="{Binding SaveAndApplySelectedRuleCommand}" />
                             </StackPanel>
                         </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Upload">
+                <Grid Margin="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.05*" />
+                        <ColumnDefinition Width="0.95*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Margin="0,0,18,0"
+                            Style="{StaticResource CardBorderStyle}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="Submit To MNTBloxIndex" />
+                                <TextBlock Margin="0,6,0,16"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="This tab submits song metadata plus a direct audio URL to the future song index API. The public site stays read-only on GitHub Pages, but the desktop app is ready to send submit and delete requests once the API is live."
+                                           TextWrapping="Wrap" />
+
+                                <Border Padding="12"
+                                        CornerRadius="12"
+                                        Background="#F7F8FA"
+                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                                   Text="Device ID" />
+                                        <DockPanel Margin="0,4,0,0"
+                                                   LastChildFill="True">
+                                            <Button DockPanel.Dock="Right"
+                                                    Margin="12,0,0,0"
+                                                    Style="{StaticResource SubtleButtonStyle}"
+                                                    Content="Copy"
+                                                    Command="{Binding CopyDeviceIdCommand}" />
+                                            <TextBox Text="{Binding DeviceId}"
+                                                     IsReadOnly="True" />
+                                        </DockPanel>
+                                        <TextBlock Margin="0,10,0,0"
+                                                   Foreground="{StaticResource MutedTextBrush}"
+                                                   Text="Song index site" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Text="{Binding SongIndexSiteUrl}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Margin="0,16,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Direct audio URL" />
+                                <TextBox Text="{Binding UploadAudioUrl, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Song name" />
+                                <TextBox Text="{Binding UploadSongName, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Artist" />
+                                <TextBox Text="{Binding UploadArtist, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Uploader name (optional)" />
+                                <TextBox Text="{Binding UploadUploaderName, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <Border Margin="0,16,0,0"
+                                        Padding="12"
+                                        CornerRadius="12"
+                                        Background="#F7F8FA"
+                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderThickness="1">
+                                    <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding UploadStatusText}"
+                                               TextWrapping="Wrap" />
+                                </Border>
+
+                                <Button Margin="0,16,0,0"
+                                        Content="Submit Link"
+                                        Command="{Binding UploadAudioCommand}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <Border Grid.Column="1"
+                            Style="{StaticResource CardBorderStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Text="My Submissions" />
+                                <TextBlock Margin="0,6,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Only songs submitted by this device ID can be deleted from here."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <ListBox Grid.Row="1"
+                                     Margin="0,14,0,14"
+                                     ItemsSource="{Binding UploadedSongs}"
+                                     SelectedItem="{Binding SelectedUploadedSong}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type core:UploadedSongRecord}">
+                                        <Border Margin="0,0,0,8"
+                                                Padding="10"
+                                                CornerRadius="10"
+                                                Background="#FAFBFC"
+                                                BorderBrush="{StaticResource CardBorderBrush}"
+                                                BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold"
+                                                           Text="{Binding SummaryDisplay}" />
+                                                <TextBlock Margin="0,4,0,0"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="{Binding Code}" />
+                                                <TextBlock Margin="0,2,0,0"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="{Binding AudioUrl}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Button Grid.Row="2"
+                                    Content="Delete Selected Upload"
+                                    Command="{Binding DeleteSelectedUploadCommand}" />
+                        </Grid>
                     </Border>
                 </Grid>
             </TabItem>

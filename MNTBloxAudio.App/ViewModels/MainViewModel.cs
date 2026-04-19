@@ -23,6 +23,7 @@ public partial class MainViewModel : ObservableObject
     private readonly RobloxSoundCacheService soundCacheService;
     private readonly RobloxAssetDownloadService assetDownloadService;
     private readonly ReplacementSourceService replacementSourceService;
+    private readonly SongIndexService songIndexService;
     private readonly Lock monitorStateLock = new();
     private readonly HashSet<ReplacementRule> observedCacheRules = [];
 
@@ -54,11 +55,17 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<RobloxSoundCacheEntry> cachedSoundFiles = [];
 
     [ObservableProperty]
+    private ObservableCollection<UploadedSongRecord> uploadedSongs = [];
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedOutputDeviceName))]
     private AudioDeviceInfo? selectedOutputDevice;
 
     [ObservableProperty]
     private ReplacementRule? selectedRule;
+
+    [ObservableProperty]
+    private UploadedSongRecord? selectedUploadedSong;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(OutputVolumeLabel))]
@@ -98,6 +105,24 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ReplacementModeText))]
     private bool autoApplyCacheReplacements;
 
+    [ObservableProperty]
+    private string deviceId = string.Empty;
+
+    [ObservableProperty]
+    private string uploadSongName = string.Empty;
+
+    [ObservableProperty]
+    private string uploadArtist = string.Empty;
+
+    [ObservableProperty]
+    private string uploadUploaderName = string.Empty;
+
+    [ObservableProperty]
+    private string uploadAudioUrl = string.Empty;
+
+    [ObservableProperty]
+    private string uploadStatusText = "Link submissions are ready once a live API exists.";
+
     public MainViewModel(
         SettingsStore settingsStore,
         AudioDeviceService deviceService,
@@ -107,7 +132,8 @@ public partial class MainViewModel : ObservableObject
         RobloxPlayerLogService playerLogService,
         RobloxSoundCacheService soundCacheService,
         RobloxAssetDownloadService assetDownloadService,
-        ReplacementSourceService replacementSourceService)
+        ReplacementSourceService replacementSourceService,
+        SongIndexService songIndexService)
     {
         this.settingsStore = settingsStore;
         this.deviceService = deviceService;
@@ -118,6 +144,7 @@ public partial class MainViewModel : ObservableObject
         this.soundCacheService = soundCacheService;
         this.assetDownloadService = assetDownloadService;
         this.replacementSourceService = replacementSourceService;
+        this.songIndexService = songIndexService;
 
         proxyService.AssetDetected += OnAssetDetected;
         proxyService.RequestObserved += OnProxyRequestObserved;
@@ -134,6 +161,8 @@ public partial class MainViewModel : ObservableObject
     public string ReplacementModeText => AutoApplyCacheReplacements
         ? "Auto cache re-check is on"
         : "Manual apply only";
+
+    public string SongIndexSiteUrl => songIndexService.SiteBaseUrl;
 
     public async Task InitializeAsync()
     {
@@ -153,6 +182,10 @@ public partial class MainViewModel : ObservableObject
         AutoMuteRobloxDuringPlayback = settings.AutoMuteRobloxDuringPlayback;
         AutoRestoreRobloxAfterPlayback = settings.AutoRestoreRobloxAfterPlayback;
         ProxyPort = settings.ProxyPort;
+        DeviceId = string.IsNullOrWhiteSpace(settings.DeviceId)
+            ? CreateDeviceId()
+            : settings.DeviceId;
+        settings.DeviceId = DeviceId;
 
         Rules = new ObservableCollection<ReplacementRule>(settings.Rules.Select(rule => new ReplacementRule
         {
@@ -171,7 +204,19 @@ public partial class MainViewModel : ObservableObject
         }));
         AttachRuleEvents(Rules);
 
+        UploadedSongs = new ObservableCollection<UploadedSongRecord>(settings.UploadedSongs.Select(song => new UploadedSongRecord
+        {
+            Code = song.Code,
+            SongName = song.SongName,
+            Artist = song.Artist,
+            UploaderName = song.UploaderName,
+            UploadedByDeviceId = song.UploadedByDeviceId,
+            AudioUrl = song.AudioUrl,
+            UploadedAt = song.UploadedAt,
+        }));
+
         SelectedRule = Rules.FirstOrDefault();
+        SelectedUploadedSong = UploadedSongs.FirstOrDefault();
 
         await RefreshAsync();
 
@@ -301,6 +346,116 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(SelectedRule));
             AddActivity("Rules", $"Attached source to {SelectedRule.Name}: {Path.GetFileName(dialog.FileName)}");
             await SaveConfigurationAsync();
+        }
+    }
+
+    [RelayCommand]
+    private void CopyDeviceId()
+    {
+        if (string.IsNullOrWhiteSpace(DeviceId))
+        {
+            UploadStatusText = "Device ID is not available yet.";
+            return;
+        }
+
+        Clipboard.SetText(DeviceId);
+        UploadStatusText = "Copied device ID to the clipboard.";
+        AddActivity("Upload", "Copied this device ID to the clipboard.");
+    }
+
+    [RelayCommand]
+    private async Task UploadAudioAsync()
+    {
+        if (string.IsNullOrWhiteSpace(UploadAudioUrl))
+        {
+            UploadStatusText = "Paste a direct audio URL before submitting.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(UploadSongName) || string.IsNullOrWhiteSpace(UploadArtist))
+        {
+            UploadStatusText = "Song name and artist are required.";
+            return;
+        }
+
+        try
+        {
+            UploadStatusText = "Submitting link to the song index API...";
+            var uploadedSong = await songIndexService.SubmitSongLinkAsync(
+                UploadAudioUrl,
+                UploadSongName,
+                UploadArtist,
+                UploadUploaderName,
+                DeviceId);
+
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var existingSong = UploadedSongs.FirstOrDefault(song =>
+                    string.Equals(song.Code, uploadedSong.Code, StringComparison.OrdinalIgnoreCase));
+
+                if (existingSong is not null)
+                {
+                    UploadedSongs.Remove(existingSong);
+                }
+
+                UploadedSongs.Insert(0, uploadedSong);
+                SelectedUploadedSong = uploadedSong;
+            });
+
+            UploadStatusText = $"Saved {uploadedSong.SongName} as {uploadedSong.Code}.";
+            AddActivity("Upload", $"Saved {uploadedSong.SongName} ({uploadedSong.Code}) to the song index.");
+
+            UploadSongName = string.Empty;
+            UploadArtist = string.Empty;
+            UploadUploaderName = string.Empty;
+            UploadAudioUrl = string.Empty;
+
+            await SaveConfigurationAsync(logActivity: false);
+        }
+        catch (Exception exception)
+        {
+            UploadStatusText = exception.Message;
+            AddActivity("Upload", $"Upload failed: {exception.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteSelectedUploadAsync()
+    {
+        if (SelectedUploadedSong is null)
+        {
+            UploadStatusText = "Choose one of your submitted songs first.";
+            return;
+        }
+
+        if (!string.Equals(SelectedUploadedSong.UploadedByDeviceId, DeviceId, StringComparison.Ordinal))
+        {
+            UploadStatusText = "This device did not upload that song.";
+            return;
+        }
+
+        try
+        {
+            UploadStatusText = $"Deleting {SelectedUploadedSong.Code}...";
+            await songIndexService.DeleteSongAsync(SelectedUploadedSong.Code, DeviceId);
+
+            var deletedCode = SelectedUploadedSong.Code;
+            var deletedName = SelectedUploadedSong.SongName;
+
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                UploadedSongs.Remove(SelectedUploadedSong);
+                SelectedUploadedSong = UploadedSongs.FirstOrDefault();
+            });
+
+            UploadStatusText = $"Deleted {deletedCode}.";
+            AddActivity("Upload", $"Deleted uploaded song {deletedName} ({deletedCode}).");
+            await SaveConfigurationAsync(logActivity: false);
+        }
+        catch (Exception exception)
+        {
+            UploadStatusText = exception.Message;
+            AddActivity("Upload", $"Delete failed: {exception.Message}");
         }
     }
 
@@ -506,6 +661,7 @@ public partial class MainViewModel : ObservableObject
 
     private async Task SaveConfigurationAsync(bool logActivity = true)
     {
+        settings.DeviceId = DeviceId;
         settings.PreferredOutputDeviceId = selectedOutputDeviceId ?? SelectedOutputDevice?.Id;
         settings.OutputVolumePercent = OutputVolumePercent;
         settings.AutoReplaceOnRobloxAudioActivity = false;
@@ -530,6 +686,16 @@ public partial class MainViewModel : ObservableObject
             PreparedAt = rule.PreparedAt,
             PreparationVersion = rule.PreparationVersion,
             ReplacementSourceWasConverted = rule.ReplacementSourceWasConverted,
+        }).ToList();
+        settings.UploadedSongs = UploadedSongs.Select(song => new UploadedSongRecord
+        {
+            Code = song.Code,
+            SongName = song.SongName,
+            Artist = song.Artist,
+            UploaderName = song.UploaderName,
+            UploadedByDeviceId = song.UploadedByDeviceId,
+            AudioUrl = song.AudioUrl,
+            UploadedAt = song.UploadedAt,
         }).ToList();
 
         await settingsStore.SaveAsync(settings);
@@ -1175,7 +1341,13 @@ public partial class MainViewModel : ObservableObject
             return null;
         }
 
-        return await replacementSourceService.ResolveAsync(rule.FilePath, forceRefreshRemote);
+        var resolvedSource = await ResolveSourceReferenceAsync(rule.FilePath);
+        if (string.IsNullOrWhiteSpace(resolvedSource))
+        {
+            return null;
+        }
+
+        return await replacementSourceService.ResolveAsync(resolvedSource, forceRefreshRemote);
     }
 
     private static bool HasReplacementSource(ReplacementRule rule)
@@ -1185,7 +1357,9 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
 
-        return IsRemoteReplacementSource(rule.FilePath) || File.Exists(rule.FilePath);
+        return SongIndexService.LooksLikeSongCode(rule.FilePath)
+            || IsRemoteReplacementSource(rule.FilePath)
+            || File.Exists(rule.FilePath);
     }
 
     private static bool IsRemoteReplacementSource(string? source)
@@ -1283,6 +1457,29 @@ public partial class MainViewModel : ObservableObject
     }
 
     private static string FormatKilobytes(long bytes) => bytes <= 0 ? "-" : $"{bytes / 1024d:N1} KB";
+
+    private async Task<string?> ResolveSourceReferenceAsync(string source)
+    {
+        if (!SongIndexService.LooksLikeSongCode(source))
+        {
+            return source;
+        }
+
+        var song = await songIndexService.ResolveSongCodeAsync(source);
+        if (song is not null)
+        {
+            AddActivity("Songs", $"Resolved song code {song.Code} to {song.SongName} by {song.Artist}.");
+            return song.AudioUrl;
+        }
+
+        AddActivity("Songs", $"Song code {source.Trim().ToUpperInvariant()} was not found in the public index.");
+        return null;
+    }
+
+    private static string CreateDeviceId()
+    {
+        return Convert.ToHexString(Guid.NewGuid().ToByteArray()).Replace("-", string.Empty, StringComparison.Ordinal);
+    }
 
     partial void OnAutoApplyCacheReplacementsChanged(bool value)
     {

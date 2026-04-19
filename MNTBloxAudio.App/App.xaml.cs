@@ -21,6 +21,7 @@ public partial class App : Application
         var soundCacheService = new RobloxSoundCacheService();
         var assetDownloadService = new RobloxAssetDownloadService();
         var replacementSourceService = new ReplacementSourceService();
+        var songIndexService = new SongIndexService();
 
         viewModel = new MainViewModel(
             settingsStore,
@@ -31,7 +32,8 @@ public partial class App : Application
             playerLogService,
             soundCacheService,
             assetDownloadService,
-            replacementSourceService);
+            replacementSourceService,
+            songIndexService);
 
         var window = new MainWindow(viewModel);
         MainWindow = window;

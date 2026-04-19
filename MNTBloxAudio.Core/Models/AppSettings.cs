@@ -6,6 +6,8 @@ public sealed class AppSettings
 {
     public string? PreferredOutputDeviceId { get; set; }
 
+    public string DeviceId { get; set; } = string.Empty;
+
     public bool AutoReplaceOnRobloxAudioActivity { get; set; }
 
     public bool AutoReplaceOnDetection { get; set; } = true;
@@ -26,4 +28,7 @@ public sealed class AppSettings
 
     [JsonInclude]
     public List<ReplacementRule> Rules { get; set; } = [];
+
+    [JsonInclude]
+    public List<UploadedSongRecord> UploadedSongs { get; set; } = [];
 }
