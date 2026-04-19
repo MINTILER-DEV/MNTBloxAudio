@@ -18,6 +18,7 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     private long replacementFileLength;
     private DateTimeOffset? preparedAt;
     private int preparationVersion;
+    private bool replacementSourceWasConverted;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -107,6 +108,12 @@ public sealed class ReplacementRule : INotifyPropertyChanged
         set => SetField(ref preparationVersion, value);
     }
 
+    public bool ReplacementSourceWasConverted
+    {
+        get => replacementSourceWasConverted;
+        set => SetField(ref replacementSourceWasConverted, value);
+    }
+
     [JsonIgnore]
     public string SourceAssetSizeDisplay => FormatKilobytes(SourceAssetLength);
 
@@ -125,6 +132,11 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     public string FileNameDisplay => string.IsNullOrWhiteSpace(FilePath)
         ? "No source"
         : TryGetRemoteDisplayName(FilePath);
+
+    [JsonIgnore]
+    public string ReplacementSourceNoteDisplay => ReplacementSourceWasConverted
+        ? "Auto-converted to MP3"
+        : string.Empty;
 
     [JsonIgnore]
     public string StatusDisplay => !IsEnabled
@@ -175,7 +187,8 @@ public sealed class ReplacementRule : INotifyPropertyChanged
             || string.Equals(propertyName, nameof(SourceAssetLength), StringComparison.Ordinal)
             || string.Equals(propertyName, nameof(ReplacementFileLength), StringComparison.Ordinal)
             || string.Equals(propertyName, nameof(PreparedAt), StringComparison.Ordinal)
-            || string.Equals(propertyName, nameof(PreparationVersion), StringComparison.Ordinal))
+            || string.Equals(propertyName, nameof(PreparationVersion), StringComparison.Ordinal)
+            || string.Equals(propertyName, nameof(ReplacementSourceWasConverted), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(IsPrepared));
             OnPropertyChanged(nameof(StatusDisplay));
@@ -184,6 +197,11 @@ public sealed class ReplacementRule : INotifyPropertyChanged
         if (string.Equals(propertyName, nameof(FilePath), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(FileNameDisplay));
+        }
+
+        if (string.Equals(propertyName, nameof(ReplacementSourceWasConverted), StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(ReplacementSourceNoteDisplay));
         }
     }
 }

@@ -167,6 +167,7 @@ public partial class MainViewModel : ObservableObject
             ReplacementFileLength = rule.ReplacementFileLength,
             PreparedAt = rule.PreparedAt,
             PreparationVersion = rule.PreparationVersion,
+            ReplacementSourceWasConverted = rule.ReplacementSourceWasConverted,
         }));
         AttachRuleEvents(Rules);
 
@@ -230,7 +231,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task Refresh() => RefreshAsync();
+    private Task Refresh() => ResetAndRefreshAsync();
 
     [RelayCommand]
     private async Task AddRuleAsync()
@@ -282,7 +283,7 @@ public partial class MainViewModel : ObservableObject
 
         var dialog = new OpenFileDialog
         {
-            Filter = "Supported Audio|*.wav;*.mp3|All Files|*.*",
+            Filter = "Supported Audio|*.mp3;*.wav;*.ogg;*.m4a;*.aac;*.wma;*.flac;*.m4b;*.mp4|All Files|*.*",
             CheckFileExists = true,
             Multiselect = false,
             Title = "Choose replacement audio",
@@ -438,6 +439,38 @@ public partial class MainViewModel : ObservableObject
         await ApplyPreparedCacheReplacementsAsync("manual apply");
     }
 
+    private async Task ResetAndRefreshAsync()
+    {
+        var restoredCount = await RestoreAllCachedSoundFilesToOriginalAsync();
+
+        foreach (var rule in Rules)
+        {
+            InvalidatePreparedState(rule);
+        }
+
+        var preparedCount = 0;
+        var enabledRules = Rules
+            .Where(rule => rule.IsEnabled)
+            .ToList();
+
+        foreach (var rule in enabledRules)
+        {
+            if (await EnsureRulePreparedAsync(rule, logSkipMessage: false))
+            {
+                preparedCount++;
+            }
+        }
+
+        await SaveConfigurationAsync(logActivity: false);
+        await RefreshAsync();
+        await ApplyPreparedCacheReplacementsAsync("refresh rebuild");
+        await SaveConfigurationAsync(logActivity: false);
+
+        AddActivity(
+            "Refresh",
+            $"Refresh restored {restoredCount} cached file(s), re-prepared {preparedCount} enabled rule(s), and rechecked the Roblox sound cache.");
+    }
+
     private async Task RefreshAsync()
     {
         var sessions = sessionService.GetRobloxSessions();
@@ -496,6 +529,7 @@ public partial class MainViewModel : ObservableObject
             ReplacementFileLength = rule.ReplacementFileLength,
             PreparedAt = rule.PreparedAt,
             PreparationVersion = rule.PreparationVersion,
+            ReplacementSourceWasConverted = rule.ReplacementSourceWasConverted,
         }).ToList();
 
         await settingsStore.SaveAsync(settings);
@@ -963,6 +997,26 @@ public partial class MainViewModel : ObservableObject
         return restoredCount;
     }
 
+    private async Task<int> RestoreAllCachedSoundFilesToOriginalAsync()
+    {
+        var snapshot = soundCacheService.GetSoundCacheSnapshot();
+        var restoredCount = 0;
+
+        foreach (var cacheEntry in snapshot)
+        {
+            if (!soundCacheService.RestoreSoundFile(cacheEntry.FullPath))
+            {
+                continue;
+            }
+
+            restoredCount++;
+            AddActivity("Cache", $"Restored {cacheEntry.FileName} back to the Roblox original during refresh.");
+        }
+
+        await UpdateCachedSoundFilesAsync();
+        return restoredCount;
+    }
+
     private async Task<bool> TryApplyPreparedReplacementToCacheEntryAsync(RobloxSoundCacheEntry cacheEntry, string reason)
     {
         var matchedRule = Rules.FirstOrDefault(rule =>
@@ -1061,6 +1115,7 @@ public partial class MainViewModel : ObservableObject
             rule.SourceAssetLength = downloadedAsset.Length;
             rule.ReplacementFileHash = soundCacheService.ComputeFileHash(replacementSource.LocalPath);
             rule.ReplacementFileLength = replacementSource.Length;
+            rule.ReplacementSourceWasConverted = replacementSource.IsConverted;
             rule.PreparedAt = DateTimeOffset.Now;
             rule.PreparationVersion = ReplacementRule.LatestPreparationVersion;
 
@@ -1110,6 +1165,7 @@ public partial class MainViewModel : ObservableObject
             : 0;
         rule.PreparedAt = null;
         rule.PreparationVersion = 0;
+        rule.ReplacementSourceWasConverted = false;
     }
 
     private async Task<ResolvedReplacementSource?> ResolveReplacementSourceAsync(ReplacementRule rule, bool forceRefreshRemote)

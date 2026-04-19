@@ -9,7 +9,7 @@ The app watches Roblox's local sound cache in `%TEMP%\Roblox\sounds`, matches ca
 1. Create a rule with an exact Roblox asset ID.
 2. Pick a local replacement file or paste a direct `http/https` URL.
 3. Save and apply the rule.
-4. The app downloads the original Roblox asset for that ID, resolves your replacement source to a local file, and remembers the replacement hash.
+4. The app downloads the original Roblox asset for that ID, resolves your replacement source to a local file, auto-converts unsupported replacement formats to a cached MP3 when needed, and remembers the replacement hash.
 5. When Roblox has the matching sound cached locally, the app replaces that cached `RBX...` file with your local file.
 
 Important behavior:
@@ -18,6 +18,8 @@ Important behavior:
 - If a rule is disabled, Roblox keeps the original audio.
 - If the matching cache file disappears later, the app disables that rule and clears its prepared state.
 - The background proxy watcher is only used to notice Roblox asset re-fetches and trigger a cache re-check. It is not the main replacement path.
+- `MP3`, `WAV`, and `OGG` are used directly. Other readable formats such as `M4A` are converted to a cached `MP3` automatically.
+- If a source format needs `ffmpeg` and it is not already installed, the app can download a verified local copy into `%AppData%\MNTBloxAudio\tools\ffmpeg`.
 
 ## UI
 

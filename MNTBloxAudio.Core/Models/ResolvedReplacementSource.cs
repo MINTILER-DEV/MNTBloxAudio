@@ -11,4 +11,6 @@ public sealed class ResolvedReplacementSource
     public long Length { get; init; }
 
     public bool IsRemote { get; init; }
+
+    public bool IsConverted { get; init; }
 }
