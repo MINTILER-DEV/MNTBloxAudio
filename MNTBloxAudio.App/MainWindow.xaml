@@ -261,7 +261,7 @@
                                            Text="Submit To MNTBloxIndex" />
                                 <TextBlock Margin="0,6,0,16"
                                            Foreground="{StaticResource MutedTextBrush}"
-                                           Text="This tab submits song metadata plus a direct audio URL to the future song index API. The public site stays read-only on GitHub Pages, but the desktop app is ready to send submit and delete requests once the API is live."
+                                           Text="This tab submits song metadata plus a direct audio URL to the Vercel-hosted song index API. The same base URL is also used when a 6-letter song code is resolved into a real audio link."
                                            TextWrapping="Wrap" />
 
                                 <Border Padding="12"
@@ -284,10 +284,9 @@
                                         </DockPanel>
                                         <TextBlock Margin="0,10,0,0"
                                                    Foreground="{StaticResource MutedTextBrush}"
-                                                   Text="Song index site" />
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Text="{Binding SongIndexSiteUrl}"
-                                                   TextWrapping="Wrap" />
+                                                   Text="Song index base URL" />
+                                        <TextBox Margin="0,4,0,0"
+                                                 Text="{Binding SongIndexBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
                                     </StackPanel>
                                 </Border>
 

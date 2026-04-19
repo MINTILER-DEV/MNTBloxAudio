@@ -109,6 +109,9 @@ public partial class MainViewModel : ObservableObject
     private string deviceId = string.Empty;
 
     [ObservableProperty]
+    private string songIndexBaseUrl = string.Empty;
+
+    [ObservableProperty]
     private string uploadSongName = string.Empty;
 
     [ObservableProperty]
@@ -162,7 +165,7 @@ public partial class MainViewModel : ObservableObject
         ? "Auto cache re-check is on"
         : "Manual apply only";
 
-    public string SongIndexSiteUrl => songIndexService.SiteBaseUrl;
+    public string SongIndexSiteUrl => songIndexService.GetSiteBaseUrl(SongIndexBaseUrl);
 
     public async Task InitializeAsync()
     {
@@ -186,6 +189,10 @@ public partial class MainViewModel : ObservableObject
             ? CreateDeviceId()
             : settings.DeviceId;
         settings.DeviceId = DeviceId;
+        SongIndexBaseUrl = string.IsNullOrWhiteSpace(settings.SongIndexBaseUrl)
+            ? songIndexService.GetDefaultSiteBaseUrl()
+            : settings.SongIndexBaseUrl;
+        settings.SongIndexBaseUrl = SongIndexBaseUrl;
 
         Rules = new ObservableCollection<ReplacementRule>(settings.Rules.Select(rule => new ReplacementRule
         {
@@ -386,7 +393,8 @@ public partial class MainViewModel : ObservableObject
                 UploadSongName,
                 UploadArtist,
                 UploadUploaderName,
-                DeviceId);
+                DeviceId,
+                SongIndexBaseUrl);
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
@@ -437,7 +445,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             UploadStatusText = $"Deleting {SelectedUploadedSong.Code}...";
-            await songIndexService.DeleteSongAsync(SelectedUploadedSong.Code, DeviceId);
+            await songIndexService.DeleteSongAsync(SelectedUploadedSong.Code, DeviceId, SongIndexBaseUrl);
 
             var deletedCode = SelectedUploadedSong.Code;
             var deletedName = SelectedUploadedSong.SongName;
@@ -662,6 +670,7 @@ public partial class MainViewModel : ObservableObject
     private async Task SaveConfigurationAsync(bool logActivity = true)
     {
         settings.DeviceId = DeviceId;
+        settings.SongIndexBaseUrl = SongIndexBaseUrl;
         settings.PreferredOutputDeviceId = selectedOutputDeviceId ?? SelectedOutputDevice?.Id;
         settings.OutputVolumePercent = OutputVolumePercent;
         settings.AutoReplaceOnRobloxAudioActivity = false;
@@ -1465,7 +1474,7 @@ public partial class MainViewModel : ObservableObject
             return source;
         }
 
-        var song = await songIndexService.ResolveSongCodeAsync(source);
+        var song = await songIndexService.ResolveSongCodeAsync(source, SongIndexBaseUrl);
         if (song is not null)
         {
             AddActivity("Songs", $"Resolved song code {song.Code} to {song.SongName} by {song.Artist}.");
@@ -1479,6 +1488,11 @@ public partial class MainViewModel : ObservableObject
     private static string CreateDeviceId()
     {
         return Convert.ToHexString(Guid.NewGuid().ToByteArray()).Replace("-", string.Empty, StringComparison.Ordinal);
+    }
+
+    partial void OnSongIndexBaseUrlChanged(string value)
+    {
+        OnPropertyChanged(nameof(SongIndexSiteUrl));
     }
 
     partial void OnAutoApplyCacheReplacementsChanged(bool value)

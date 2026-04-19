@@ -8,6 +8,8 @@ public sealed class AppSettings
 
     public string DeviceId { get; set; } = string.Empty;
 
+    public string SongIndexBaseUrl { get; set; } = string.Empty;
+
     public bool AutoReplaceOnRobloxAudioActivity { get; set; }
 
     public bool AutoReplaceOnDetection { get; set; } = true;

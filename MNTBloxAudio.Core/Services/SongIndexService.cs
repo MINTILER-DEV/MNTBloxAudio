@@ -12,15 +12,13 @@ public sealed class SongIndexService
         AutomaticDecompression = DecompressionMethods.All,
     });
 
-    private static readonly Uri SiteBaseUri = new("https://mintiler-dev.github.io/MNTBloxIndex/");
-    private static readonly Uri ApiBaseUri = new(SiteBaseUri, "api/");
-    private static readonly Uri IndexUri = new(SiteBaseUri, "data/index.json");
+    private const string DefaultSiteBaseUrl = "https://mntbloxindex.vercel.app/";
 
-    public string SiteBaseUrl => SiteBaseUri.AbsoluteUri;
+    public string GetDefaultSiteBaseUrl() => DefaultSiteBaseUrl;
 
-    public string IndexJsonUrl => IndexUri.AbsoluteUri;
+    public string GetSiteBaseUrl(string? configuredBaseUrl) => BuildSiteBaseUri(configuredBaseUrl).AbsoluteUri;
 
-    public string UploadApiUrl => new Uri(ApiBaseUri, "upload").AbsoluteUri;
+    public string GetIndexApiUrl(string? configuredBaseUrl) => new Uri(BuildSiteBaseUri(configuredBaseUrl), "api/index").AbsoluteUri;
 
     public static bool LooksLikeSongCode(string? value)
     {
@@ -33,7 +31,10 @@ public sealed class SongIndexService
         return trimmed.Length == 6 && trimmed.All(character => char.IsLetter(character));
     }
 
-    public async Task<SongIndexEntry?> ResolveSongCodeAsync(string code, CancellationToken cancellationToken = default)
+    public async Task<SongIndexEntry?> ResolveSongCodeAsync(
+        string code,
+        string? configuredBaseUrl = null,
+        CancellationToken cancellationToken = default)
     {
         var normalizedCode = NormalizeSongCode(code);
         if (!LooksLikeSongCode(normalizedCode))
@@ -41,11 +42,11 @@ public sealed class SongIndexService
             return null;
         }
 
-        var document = await LoadIndexAsync(cancellationToken).ConfigureAwait(false);
+        var document = await LoadIndexAsync(configuredBaseUrl, cancellationToken).ConfigureAwait(false);
         var match = document.Songs.FirstOrDefault(entry =>
             string.Equals(entry.Code, normalizedCode, StringComparison.OrdinalIgnoreCase));
 
-        return match is null ? null : NormalizeUrls(match);
+        return match is null ? null : NormalizeUrls(match, configuredBaseUrl);
     }
 
     public async Task<UploadedSongRecord> SubmitSongLinkAsync(
@@ -54,6 +55,7 @@ public sealed class SongIndexService
         string artist,
         string uploaderName,
         string deviceId,
+        string? configuredBaseUrl = null,
         CancellationToken cancellationToken = default)
     {
         if (!Uri.TryCreate(audioUrl, UriKind.Absolute, out var parsedUri)
@@ -62,7 +64,7 @@ public sealed class SongIndexService
             throw new InvalidOperationException("Audio URL must be an absolute http/https link.");
         }
 
-        using var response = await HttpClient.PostAsJsonAsync(new Uri(ApiBaseUri, "upload"), new
+        using var response = await HttpClient.PostAsJsonAsync(new Uri(BuildSiteBaseUri(configuredBaseUrl), "api/upload"), new
         {
             audioUrl = parsedUri.AbsoluteUri,
             songName = songName.Trim(),
@@ -84,7 +86,7 @@ public sealed class SongIndexService
             throw new InvalidOperationException("Upload succeeded but the response body was empty.");
         }
 
-        var normalized = NormalizeUrls(uploadedEntry);
+        var normalized = NormalizeUrls(uploadedEntry, configuredBaseUrl);
         return new UploadedSongRecord
         {
             Code = normalized.Code,
@@ -97,7 +99,11 @@ public sealed class SongIndexService
         };
     }
 
-    public async Task DeleteSongAsync(string code, string deviceId, CancellationToken cancellationToken = default)
+    public async Task DeleteSongAsync(
+        string code,
+        string deviceId,
+        string? configuredBaseUrl = null,
+        CancellationToken cancellationToken = default)
     {
         var normalizedCode = NormalizeSongCode(code);
         if (!LooksLikeSongCode(normalizedCode))
@@ -105,7 +111,7 @@ public sealed class SongIndexService
             throw new InvalidOperationException("Song code must be exactly six letters.");
         }
 
-        var requestUri = new Uri(ApiBaseUri, $"songs/{normalizedCode}?deviceId={Uri.EscapeDataString(deviceId)}");
+        var requestUri = new Uri(BuildSiteBaseUri(configuredBaseUrl), $"api/songs/{normalizedCode}?deviceId={Uri.EscapeDataString(deviceId)}");
         using var response = await HttpClient.DeleteAsync(requestUri, cancellationToken).ConfigureAwait(false);
         if (response.IsSuccessStatusCode)
         {
@@ -116,17 +122,19 @@ public sealed class SongIndexService
         throw new InvalidOperationException(ExtractErrorMessage(body) ?? "Delete request failed.");
     }
 
-    private static async Task<SongIndexDocument> LoadIndexAsync(CancellationToken cancellationToken)
+    private static async Task<SongIndexDocument> LoadIndexAsync(string? configuredBaseUrl, CancellationToken cancellationToken)
     {
-        var document = await HttpClient.GetFromJsonAsync<SongIndexDocument>(IndexUri, cancellationToken).ConfigureAwait(false);
+        var indexUri = new Uri(BuildSiteBaseUri(configuredBaseUrl), "api/index");
+        var document = await HttpClient.GetFromJsonAsync<SongIndexDocument>(indexUri, cancellationToken).ConfigureAwait(false);
         return document ?? new SongIndexDocument();
     }
 
-    private static SongIndexEntry NormalizeUrls(SongIndexEntry entry)
+    private static SongIndexEntry NormalizeUrls(SongIndexEntry entry, string? configuredBaseUrl)
     {
+        var siteBaseUri = BuildSiteBaseUri(configuredBaseUrl);
         var resolvedAudioUri = Uri.TryCreate(entry.AudioUrl, UriKind.Absolute, out var absoluteUri)
             ? absoluteUri
-            : new Uri(SiteBaseUri, entry.AudioUrl);
+            : new Uri(siteBaseUri, entry.AudioUrl);
 
         return new SongIndexEntry
         {
@@ -138,6 +146,21 @@ public sealed class SongIndexService
             AudioUrl = resolvedAudioUri.AbsoluteUri,
             UploadedAt = entry.UploadedAt,
         };
+    }
+
+    private static Uri BuildSiteBaseUri(string? configuredBaseUrl)
+    {
+        if (Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var configuredUri)
+            && (configuredUri.Scheme == Uri.UriSchemeHttp || configuredUri.Scheme == Uri.UriSchemeHttps))
+        {
+            var normalizedBaseUrl = configuredUri.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
+                ? configuredUri.AbsoluteUri
+                : configuredUri.AbsoluteUri + "/";
+
+            return new Uri(normalizedBaseUrl);
+        }
+
+        return new Uri(DefaultSiteBaseUrl);
     }
 
     private static string NormalizeSongCode(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
