@@ -1,3 +1,30 @@
+# MNTBloxAudio 1.2.1
+
+Song index targeting update with linked Roblox sound IDs and improved preview controls.
+
+## Linked Roblox IDs
+
+- Song index entries can now store a linked Roblox sound ID alongside the replacement source
+- Using a 6-letter song code in the app now auto-fills the selected rule's target Roblox sound ID when that entry has one
+- Song search and upload views now show the linked Roblox sound ID for each entry when available
+
+## Upload And Index Updates
+
+- Uploads now include a required linked Roblox sound ID that tells the app which Roblox sound the entry is meant to replace
+- Roblox source sound IDs can still be used to autofill replacement metadata and a direct `assetdelivery.roblox.com` audio URL
+- Updates the public index schema to include linked Roblox sound IDs for new entries
+
+## Preview And Workflow
+
+- Adds a dedicated `Stop Rule Preview` control for rule playback
+- Keeps the regular preview stop controls for typed URLs, uploaded songs, and indexed song previews
+- Improves the "Use Code In Rule" workflow so song codes can act more like a reusable linked replacement entry
+
+## Notes
+
+- Older song index entries may not have a linked Roblox sound ID yet
+- Entries without a linked Roblox sound ID still resolve as replacement sources, but they will not auto-fill a rule target
+
 # MNTBloxAudio 1.2.0
 
 Local Roblox audio replacement through Roblox's sound cache, now with song index support.

@@ -248,6 +248,9 @@
                                     <Button Style="{StaticResource SubtleButtonStyle}"
                                             Content="Preview Rule"
                                             Command="{Binding PlaySelectedRuleCommand}" />
+                                    <Button Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Stop Rule Preview"
+                                            Command="{Binding StopRulePreviewCommand}" />
                                     <Button Content="Save + Apply Rule"
                                             Command="{Binding SaveAndApplySelectedRuleCommand}" />
                                 </WrapPanel>
@@ -275,7 +278,7 @@
                                            Text="Submit To MNTBloxIndex" />
                                 <TextBlock Margin="0,6,0,16"
                                            Foreground="{StaticResource MutedTextBrush}"
-                                           Text="This tab submits song metadata plus a direct audio URL to the Vercel-hosted song index API. The same base URL is also used when a 6-letter song code is resolved into a real audio link."
+                                           Text="This tab submits a linked Roblox sound ID plus song metadata and a direct audio URL to the Vercel-hosted song index API. The same base URL is also used when a 6-letter song code is resolved into a real audio link. You can also paste a source Roblox sound ID to autofill the direct assetdelivery URL plus metadata."
                                            TextWrapping="Wrap" />
 
                                 <Border Padding="12"
@@ -305,6 +308,23 @@
                                 </Border>
 
                                 <TextBlock Margin="0,16,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Source Roblox sound ID" />
+                                <DockPanel LastChildFill="True">
+                                    <Button DockPanel.Dock="Right"
+                                            Margin="12,0,0,0"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            Content="Autofill"
+                                            Command="{Binding AutofillUploadFromRobloxSoundIdCommand}" />
+                                    <TextBox Text="{Binding UploadRobloxSoundId, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+
+                                <TextBlock Margin="0,8,0,0"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Linked Roblox sound ID to replace" />
+                                <TextBox Text="{Binding UploadLinkedAssetId, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Margin="0,4,0,0"
                                            Foreground="{StaticResource MutedTextBrush}"
                                            Text="Direct audio URL" />
                                 <TextBox Text="{Binding UploadAudioUrl, UpdateSourceTrigger=PropertyChanged}" />
@@ -380,6 +400,9 @@
                                                 <TextBlock Margin="0,4,0,0"
                                                            Foreground="{StaticResource MutedTextBrush}"
                                                            Text="{Binding Code}" />
+                                                <TextBlock Margin="0,2,0,0"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="{Binding LinkedAssetIdDisplay}" />
                                                 <TextBlock Margin="0,2,0,0"
                                                            Foreground="{StaticResource MutedTextBrush}"
                                                            Text="{Binding AudioUrl}"
@@ -509,6 +532,10 @@
                                                                Text="{Binding Artist}" />
                                                     <TextBlock Margin="0,2,0,0"
                                                                Foreground="{StaticResource MutedTextBrush}"
+                                                               Text="{Binding LinkedAssetIdDisplay}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,2,0,0"
+                                                               Foreground="{StaticResource MutedTextBrush}"
                                                                Text="{Binding UploaderName}"
                                                                TextWrapping="Wrap" />
                                                 </StackPanel>
@@ -558,6 +585,9 @@
                                                Text="{Binding SelectedSongSearchResult.Code}" />
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="{StaticResource MutedTextBrush}"
+                                               Text="{Binding SelectedSongSearchResult.LinkedAssetIdDisplay}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="{StaticResource MutedTextBrush}"
                                                Text="{Binding SelectedSongSearchResult.UploaderName}" />
                                     <TextBlock Margin="0,8,0,0"
                                                Foreground="{StaticResource MutedTextBrush}"
@@ -598,7 +628,7 @@
 
                             <StackPanel Grid.Row="3">
                                 <TextBlock Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Tip: after using a code in a rule, the rule source can stay as the 6-letter code and the app will resolve it through the index API when needed."
+                                           Text="Tip: when an index entry has a linked Roblox sound ID, using its code in a rule will set both the rule source and the target asset ID automatically."
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </Grid>

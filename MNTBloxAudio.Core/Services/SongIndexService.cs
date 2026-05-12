@@ -81,7 +81,36 @@ public sealed class SongIndexService
             .ToList();
     }
 
+    public async Task<RobloxSoundAutofillInfo> ResolveRobloxSoundAutofillAsync(
+        string assetId,
+        string? configuredBaseUrl = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAssetId = NormalizeRobloxAssetId(assetId);
+        if (string.IsNullOrWhiteSpace(normalizedAssetId))
+        {
+            throw new InvalidOperationException("Roblox sound ID must contain digits only.");
+        }
+
+        var requestUri = new Uri(BuildSiteBaseUri(configuredBaseUrl), $"api/roblox-sounds/{normalizedAssetId}");
+        using var response = await HttpClient.GetAsync(requestUri, cancellationToken).ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(ExtractErrorMessage(body) ?? "Roblox sound lookup failed.");
+        }
+
+        var autofillInfo = System.Text.Json.JsonSerializer.Deserialize<RobloxSoundAutofillInfo>(body, JsonSerializerOptions);
+        if (autofillInfo is null)
+        {
+            throw new InvalidOperationException("Roblox sound lookup returned an empty response.");
+        }
+
+        return autofillInfo;
+    }
+
     public async Task<UploadedSongRecord> SubmitSongLinkAsync(
+        string linkedAssetId,
         string audioUrl,
         string songName,
         string artist,
@@ -90,6 +119,12 @@ public sealed class SongIndexService
         string? configuredBaseUrl = null,
         CancellationToken cancellationToken = default)
     {
+        var normalizedLinkedAssetId = NormalizeRobloxAssetId(linkedAssetId);
+        if (string.IsNullOrWhiteSpace(normalizedLinkedAssetId))
+        {
+            throw new InvalidOperationException("Linked Roblox sound ID must contain digits only.");
+        }
+
         if (!Uri.TryCreate(audioUrl, UriKind.Absolute, out var parsedUri)
             || (parsedUri.Scheme != Uri.UriSchemeHttp && parsedUri.Scheme != Uri.UriSchemeHttps))
         {
@@ -98,6 +133,7 @@ public sealed class SongIndexService
 
         using var response = await HttpClient.PostAsJsonAsync(new Uri(BuildSiteBaseUri(configuredBaseUrl), "api/upload"), new
         {
+            linkedAssetId = normalizedLinkedAssetId,
             audioUrl = parsedUri.AbsoluteUri,
             songName = songName.Trim(),
             artist = artist.Trim(),
@@ -122,6 +158,7 @@ public sealed class SongIndexService
         return new UploadedSongRecord
         {
             Code = normalized.Code,
+            LinkedAssetId = normalized.LinkedAssetId,
             SongName = normalized.SongName,
             Artist = normalized.Artist,
             UploaderName = normalized.UploaderName,
@@ -171,6 +208,7 @@ public sealed class SongIndexService
         return new SongIndexEntry
         {
             Code = NormalizeSongCode(entry.Code),
+            LinkedAssetId = NormalizeRobloxAssetId(entry.LinkedAssetId),
             SongName = entry.SongName,
             Artist = entry.Artist,
             UploaderName = entry.UploaderName,
@@ -197,9 +235,21 @@ public sealed class SongIndexService
 
     private static string NormalizeSongCode(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
 
+    private static string NormalizeRobloxAssetId(string? value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (trimmed.StartsWith("rbxassetid://", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed["rbxassetid://".Length..];
+        }
+
+        return trimmed.All(char.IsDigit) ? trimmed : string.Empty;
+    }
+
     private static bool MatchesSearch(SongIndexEntry entry, string query)
     {
         return Contains(entry.Code, query)
+            || Contains(entry.LinkedAssetId, query)
             || Contains(entry.SongName, query)
             || Contains(entry.Artist, query)
             || Contains(entry.UploaderName, query)

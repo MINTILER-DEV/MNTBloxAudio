@@ -121,6 +121,12 @@ public partial class MainViewModel : ObservableObject
     private bool useDarkMode;
 
     [ObservableProperty]
+    private string uploadRobloxSoundId = string.Empty;
+
+    [ObservableProperty]
+    private string uploadLinkedAssetId = string.Empty;
+
+    [ObservableProperty]
     private string uploadSongName = string.Empty;
 
     [ObservableProperty]
@@ -243,6 +249,7 @@ public partial class MainViewModel : ObservableObject
             .Select(song => new UploadedSongRecord
             {
                 Code = song.Code,
+                LinkedAssetId = song.LinkedAssetId,
                 SongName = song.SongName,
                 Artist = song.Artist,
                 UploaderName = song.UploaderName,
@@ -416,6 +423,34 @@ public partial class MainViewModel : ObservableObject
                 : $"{UploadSongName} - {UploadArtist}".Trim(' ', '-'));
     }
 
+    [RelayCommand]
+    private async Task AutofillUploadFromRobloxSoundIdAsync()
+    {
+        if (string.IsNullOrWhiteSpace(UploadRobloxSoundId))
+        {
+            UploadStatusText = "Paste a Roblox sound ID first.";
+            return;
+        }
+
+        try
+        {
+            UploadStatusText = "Looking up Roblox sound metadata...";
+            var autofill = await songIndexService.ResolveRobloxSoundAutofillAsync(UploadRobloxSoundId, SongIndexBaseUrl);
+
+            UploadAudioUrl = autofill.AudioUrl;
+            UploadSongName = autofill.SongName;
+            UploadArtist = autofill.Artist;
+
+            UploadStatusText = $"Filled {autofill.SongName} by {autofill.Artist}.";
+            AddActivity("Upload", $"Autofilled upload fields from Roblox sound {autofill.AssetId}.");
+        }
+        catch (Exception exception)
+        {
+            UploadStatusText = exception.Message;
+            AddActivity("Upload", $"Roblox sound autofill failed: {exception.Message}");
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanPreviewSelectedUpload))]
     private async Task PreviewSelectedUploadAsync()
     {
@@ -443,8 +478,29 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void StopRulePreview()
+    {
+        playbackService.Stop();
+
+        if (robloxMuted && AutoRestoreRobloxAfterPlayback)
+        {
+            sessionService.SetMute(false);
+            robloxMuted = false;
+            RobloxMuteStatus = "Live";
+        }
+
+        AddActivity("Playback", "Stopped the current rule preview.");
+    }
+
+    [RelayCommand]
     private async Task UploadAudioAsync()
     {
+        if (string.IsNullOrWhiteSpace(UploadLinkedAssetId))
+        {
+            UploadStatusText = "Linked Roblox sound ID is required.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(UploadAudioUrl))
         {
             UploadStatusText = "Paste a direct audio URL before submitting.";
@@ -461,6 +517,7 @@ public partial class MainViewModel : ObservableObject
         {
             UploadStatusText = "Submitting link to the song index API...";
             var uploadedSong = await songIndexService.SubmitSongLinkAsync(
+                UploadLinkedAssetId,
                 UploadAudioUrl,
                 UploadSongName,
                 UploadArtist,
@@ -489,6 +546,8 @@ public partial class MainViewModel : ObservableObject
             UploadArtist = string.Empty;
             UploadUploaderName = string.Empty;
             UploadAudioUrl = string.Empty;
+            UploadLinkedAssetId = string.Empty;
+            UploadRobloxSoundId = string.Empty;
 
             await SaveConfigurationAsync(logActivity: false);
         }
@@ -616,13 +675,24 @@ public partial class MainViewModel : ObservableObject
         }
 
         SelectedRule.FilePath = SelectedSongSearchResult.Code;
+        if (!string.IsNullOrWhiteSpace(SelectedSongSearchResult.LinkedAssetId))
+        {
+            SelectedRule.AssetIdPattern = SelectedSongSearchResult.LinkedAssetId;
+        }
+
         SelectedRule.ReplacementFileHash = string.Empty;
         SelectedRule.ReplacementFileLength = 0;
         SelectedRule = SelectedRule;
         OnPropertyChanged(nameof(SelectedRule));
 
-        SongSearchStatusText = $"Set {SelectedRule.Name} to use song code {SelectedSongSearchResult.Code}.";
-        AddActivity("Songs", $"Applied song code {SelectedSongSearchResult.Code} to {SelectedRule.Name}.");
+        SongSearchStatusText = string.IsNullOrWhiteSpace(SelectedSongSearchResult.LinkedAssetId)
+            ? $"Set {SelectedRule.Name} to use song code {SelectedSongSearchResult.Code}. This entry does not have a linked Roblox sound ID yet."
+            : $"Set {SelectedRule.Name} to use song code {SelectedSongSearchResult.Code} for Roblox sound {SelectedSongSearchResult.LinkedAssetId}.";
+        AddActivity(
+            "Songs",
+            string.IsNullOrWhiteSpace(SelectedSongSearchResult.LinkedAssetId)
+                ? $"Applied song code {SelectedSongSearchResult.Code} to {SelectedRule.Name} without changing its asset ID."
+                : $"Applied song code {SelectedSongSearchResult.Code} to {SelectedRule.Name} and linked asset {SelectedSongSearchResult.LinkedAssetId}.");
         await SaveConfigurationAsync(logActivity: false);
     }
 
@@ -861,6 +931,7 @@ public partial class MainViewModel : ObservableObject
             .Select(song => new UploadedSongRecord
             {
                 Code = song.Code,
+                LinkedAssetId = song.LinkedAssetId,
                 SongName = song.SongName,
                 Artist = song.Artist,
                 UploaderName = song.UploaderName,

@@ -6,6 +6,8 @@ public sealed class UploadedSongRecord
 {
     public string Code { get; set; } = string.Empty;
 
+    public string LinkedAssetId { get; set; } = string.Empty;
+
     public string SongName { get; set; } = string.Empty;
 
     public string Artist { get; set; } = string.Empty;
@@ -17,6 +19,11 @@ public sealed class UploadedSongRecord
     public string AudioUrl { get; set; } = string.Empty;
 
     public DateTimeOffset? UploadedAt { get; set; }
+
+    [JsonIgnore]
+    public string LinkedAssetIdDisplay => string.IsNullOrWhiteSpace(LinkedAssetId)
+        ? "No linked Roblox ID"
+        : $"Linked Roblox ID {LinkedAssetId}";
 
     [JsonIgnore]
     public string SummaryDisplay => string.IsNullOrWhiteSpace(Artist)
