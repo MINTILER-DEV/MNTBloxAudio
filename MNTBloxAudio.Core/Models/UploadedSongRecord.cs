@@ -29,4 +29,33 @@ public sealed class UploadedSongRecord
     public string SummaryDisplay => string.IsNullOrWhiteSpace(Artist)
         ? SongName
         : $"{SongName} - {Artist}";
+
+    [JsonIgnore]
+    public bool HasPlayableAudio => Uri.TryCreate(AudioUrl, UriKind.Absolute, out var uri)
+        && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
+
+    [JsonIgnore]
+    public string StatusDisplay => !HasPlayableAudio
+        ? "Broken Audio"
+        : string.IsNullOrWhiteSpace(LinkedAssetId)
+            ? "Direct Only"
+            : "Linked";
+
+    [JsonIgnore]
+    public string StatusTone => !HasPlayableAudio
+        ? "Warn"
+        : string.IsNullOrWhiteSpace(LinkedAssetId)
+            ? "Info"
+            : "Good";
+
+    [JsonIgnore]
+    public string UploaderDisplay => string.IsNullOrWhiteSpace(UploaderName)
+        ? "Uploader not provided"
+        : $"Uploaded by {UploaderName}";
+
+    [JsonIgnore]
+    public string UploadedAtDisplay => UploadedAt is null
+        ? "Saved locally"
+        : UploadedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
 }

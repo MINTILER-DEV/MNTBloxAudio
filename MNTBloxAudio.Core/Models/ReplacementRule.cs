@@ -153,10 +153,49 @@ public sealed class ReplacementRule : INotifyPropertyChanged
 
     [JsonIgnore]
     public string StatusDisplay => !IsEnabled
-        ? "Original"
-        : IsPrepared
-            ? "Ready"
-            : "Needs prep";
+        ? "Disabled"
+        : !HasSourceReference(FilePath)
+            ? "Missing Source"
+            : IsPrepared
+                ? "Ready"
+                : "Needs Prep";
+
+    [JsonIgnore]
+    public string StatusTone => !IsEnabled
+        ? "Muted"
+        : !HasSourceReference(FilePath)
+            ? "Warn"
+            : IsPrepared
+                ? "Good"
+                : "Info";
+
+    [JsonIgnore]
+    public string SourceTypeDisplay
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(FilePath))
+            {
+                return "No source";
+            }
+
+            if (LooksLikeSongCode(FilePath))
+            {
+                return "Song code source";
+            }
+
+            return IsRemoteSource(FilePath) ? "Remote source" : "Local file source";
+        }
+    }
+
+    [JsonIgnore]
+    public string StatusDetailDisplay => !IsEnabled
+        ? "Rule is off and Roblox keeps the original audio."
+        : !HasSourceReference(FilePath)
+            ? "Add a local file, direct URL, or 6-letter code."
+            : IsPrepared
+                ? "Prepared and ready to replace matching cache audio."
+                : "Save and apply this rule to prepare it.";
 
     public static int LatestPreparationVersion => CurrentPreparationVersion;
 
@@ -190,6 +229,18 @@ public sealed class ReplacementRule : INotifyPropertyChanged
         return trimmed.Length == 6 && trimmed.All(character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z');
     }
 
+    private static bool HasSourceReference(string? source)
+    {
+        return !string.IsNullOrWhiteSpace(source);
+    }
+
+    private static bool IsRemoteSource(string source)
+    {
+        return Uri.TryCreate(source, UriKind.Absolute, out var uri)
+            && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string TryGetRemoteDisplayName(string source)
     {
         if (Uri.TryCreate(source, UriKind.Absolute, out var uri)
@@ -216,11 +267,17 @@ public sealed class ReplacementRule : INotifyPropertyChanged
         {
             OnPropertyChanged(nameof(IsPrepared));
             OnPropertyChanged(nameof(StatusDisplay));
+            OnPropertyChanged(nameof(StatusTone));
+            OnPropertyChanged(nameof(StatusDetailDisplay));
         }
 
         if (string.Equals(propertyName, nameof(FilePath), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(FileNameDisplay));
+            OnPropertyChanged(nameof(SourceTypeDisplay));
+            OnPropertyChanged(nameof(StatusDisplay));
+            OnPropertyChanged(nameof(StatusTone));
+            OnPropertyChanged(nameof(StatusDetailDisplay));
         }
 
         if (string.Equals(propertyName, nameof(ReplacementSourceWasConverted), StringComparison.Ordinal))
