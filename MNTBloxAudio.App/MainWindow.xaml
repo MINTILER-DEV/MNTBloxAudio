@@ -6,14 +6,14 @@
         xmlns:core="clr-namespace:MNTBloxAudio.Core.Models;assembly=MNTBloxAudio.Core"
         mc:Ignorable="d"
         Title="MNTBloxAudio"
-        Width="1280"
+        Width="1300"
         Height="860"
-        MinWidth="980"
-        MinHeight="680"
+        MinWidth="1040"
+        MinHeight="720"
         Background="{StaticResource WindowBrush}"
         FontFamily="Segoe UI Variable Text"
         WindowStartupLocation="CenterScreen">
-    <Grid Margin="28">
+    <Grid Margin="34">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -31,97 +31,17 @@
                       MediaEnded="PreviewPlayer_OnMediaEnded"
                       MediaFailed="PreviewPlayer_OnMediaFailed" />
 
-        <StackPanel Grid.Row="0">
-            <TextBlock FontFamily="Segoe UI Variable Display"
-                       FontSize="46"
-                       FontWeight="Light"
-                       Foreground="{StaticResource MutedTextBrush}"
-                       Text="MINTILER'S ROBLOX AUDIO REPLACER"
-                       TextWrapping="Wrap"
-                       TextOptions.TextFormattingMode="Display" />
-            <TextBlock Margin="2,10,0,0"
-                       Foreground="{StaticResource MutedTextBrush}"
-                       Text="Shape local replacements, keep an eye on each audio's status, and manage uploads or index results from the same dashboard."
-                       TextWrapping="Wrap" />
-        </StackPanel>
+        <TextBlock Grid.Row="0"
+                   Style="{StaticResource WindowTitleTextStyle}"
+                   Text="MINTILER'S ROBLOX AUDIO REPLACER"
+                   TextWrapping="Wrap" />
 
-        <Grid Grid.Row="1"
-              Margin="0,18,0,20">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0"
-                    Margin="0,0,12,0"
-                    Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                               Text="Roblox Sessions" />
-                    <TextBlock Margin="0,8,0,0"
-                               Style="{StaticResource MetricValueTextStyle}"
-                               Text="{Binding RobloxSessionCount}" />
-                    <TextBlock Margin="0,8,0,0"
-                               Foreground="{StaticResource MutedTextBrush}"
-                               Text="{Binding SessionStatusText}" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="1"
-                    Margin="0,0,12,0"
-                    Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                               Text="Configured Audio" />
-                    <TextBlock Margin="0,8,0,0"
-                               Style="{StaticResource MetricValueTextStyle}"
-                               Text="{Binding RuleCount}" />
-                    <TextBlock Margin="0,8,0,0"
-                               Foreground="{StaticResource MutedTextBrush}"
-                               Text="Rules currently tracked in My Audio" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="2"
-                    Margin="0,0,12,0"
-                    Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                               Text="Replacement Mode" />
-                    <TextBlock Margin="0,8,0,0"
-                               FontSize="20"
-                               FontWeight="SemiBold"
-                               Text="{Binding ReplacementModeText}" />
-                    <TextBlock Margin="0,8,0,0"
-                               Foreground="{StaticResource MutedTextBrush}"
-                               Text="{Binding RobloxMuteStatus}" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="3"
-                    Style="{StaticResource CardBorderStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                               Text="Preview" />
-                    <TextBlock Margin="0,8,0,0"
-                               FontSize="20"
-                               FontWeight="SemiBold"
-                               Text="{Binding PreviewHeading}" />
-                    <TextBlock Margin="0,8,0,0"
-                               Foreground="{StaticResource MutedTextBrush}"
-                               Text="{Binding PreviewStatusText}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <TabControl Grid.Row="2">
+        <TabControl Grid.Row="2"
+                    Margin="0,26,0,0">
             <TabItem Header="MY AUDIO">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.65*" />
+                        <ColumnDefinition Width="2.1*" />
                         <ColumnDefinition Width="0.95*" />
                     </Grid.ColumnDefinitions>
 
@@ -135,99 +55,105 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <DockPanel LastChildFill="False">
-                                <StackPanel DockPanel.Dock="Left">
-                                    <TextBlock FontFamily="Segoe UI Variable Display"
-                                               FontSize="22"
-                                               FontWeight="Light"
-                                               Text="MY AUDIO" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="Every rule gets a status badge so it is easy to see what is ready, missing a source, or disabled."
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.2*" />
+                                    <ColumnDefinition Width="2.2*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                                <WrapPanel DockPanel.Dock="Right"
-                                           HorizontalAlignment="Right">
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Add"
-                                            Command="{Binding AddRuleCommand}" />
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Apply All"
-                                            Command="{Binding ApplyAllRulesCommand}" />
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Remove"
-                                            Command="{Binding RemoveSelectedRuleCommand}" />
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Reset + Refresh"
-                                            Command="{Binding RefreshCommand}" />
-                                </WrapPanel>
-                            </DockPanel>
+                                <TextBlock Grid.Column="0"
+                                           Style="{StaticResource PanelHeadingTextStyle}"
+                                           VerticalAlignment="Center"
+                                           Text="MY AUDIO" />
 
-                            <Border Grid.Row="1"
-                                    Margin="0,18,0,16"
-                                    Padding="14"
-                                    CornerRadius="10"
-                                    Background="{StaticResource SurfaceBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1">
-                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Tip: select a card to edit it on the right. The card subtitle tells you whether the source is local, remote, or a 6-letter index code."
-                                           TextWrapping="Wrap" />
-                            </Border>
+                                <Grid Grid.Column="1"
+                                      Margin="20,0,14,0"
+                                      VerticalAlignment="Center">
+                                    <TextBox Margin="0"
+                                             Text="{Binding RuleSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
 
-                            <ListBox Grid.Row="2"
-                                     ItemsSource="{Binding Rules}"
-                                     SelectedItem="{Binding SelectedRule}"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ListBox.ItemsPanel>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type core:ReplacementRule}">
-                                        <Border Style="{StaticResource AudioCardBorderStyle}">
-                                            <StackPanel>
-                                                <DockPanel LastChildFill="False">
-                                                    <Border DockPanel.Dock="Right"
-                                                            Tag="{Binding StatusTone}"
-                                                            Style="{StaticResource StatusBadgeBorderStyle}">
-                                                        <TextBlock Tag="{Binding StatusTone}"
-                                                                   Style="{StaticResource StatusBadgeTextStyle}"
-                                                                   Text="{Binding StatusDisplay}" />
-                                                    </Border>
-                                                    <TextBlock FontSize="18"
-                                                               FontWeight="SemiBold"
+                                <Button Grid.Column="2"
+                                        Width="58"
+                                        Height="46"
+                                        Margin="0,0,0,12"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Content="F"
+                                        Command="{Binding ToggleRuleFilterCommand}" />
+                            </Grid>
+
+                            <WrapPanel Grid.Row="1"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,10,0,16">
+                                <Button Content="Add"
+                                        Command="{Binding AddRuleCommand}" />
+                                <Button Content="Apply All"
+                                        Command="{Binding ApplyAllRulesCommand}" />
+                                <Button Content="Remove"
+                                        Command="{Binding RemoveSelectedRuleCommand}" />
+                            </WrapPanel>
+
+                            <ScrollViewer Grid.Row="2"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ListBox ItemsSource="{Binding VisibleRules}"
+                                         SelectedItem="{Binding SelectedRule}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type core:ReplacementRule}">
+                                            <Border Style="{StaticResource RuleTileBorderStyle}">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+
+                                                    <TextBlock Style="{StaticResource CardTitleTextStyle}"
                                                                Text="{Binding Name}"
                                                                TextWrapping="Wrap" />
-                                                </DockPanel>
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding SourceTypeDisplay}" />
-                                                <TextBlock Margin="0,18,0,0"
-                                                           FontSize="17"
-                                                           Text="{Binding AssetIdPattern, StringFormat=Target asset {0}}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding FileNameDisplay}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,10,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding StatusDetailDisplay}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,12,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding SourceAssetSizeDisplay, StringFormat=Roblox cache {0}}" />
-                                                <TextBlock Margin="0,2,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding ReplacementFileSizeDisplay, StringFormat=Replacement {0}}" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                                    <TextBlock Grid.Row="1"
+                                                               Margin="0,2,0,0"
+                                                               Style="{StaticResource TinyLabelTextStyle}"
+                                                               Text="{Binding SourceTypeDisplay}" />
+
+                                                    <StackPanel Grid.Row="2"
+                                                                Margin="0,30,0,0"
+                                                                VerticalAlignment="Top">
+                                                        <TextBlock Foreground="{StaticResource BrightTextBrush}"
+                                                                   FontSize="18"
+                                                                   Text="{Binding AssetIdPattern, StringFormat=#: {0}}" />
+                                                        <TextBlock Margin="0,8,0,0"
+                                                                   Style="{StaticResource TinyLabelTextStyle}"
+                                                                   Text="{Binding FileNameDisplay}"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+
+                                                    <DockPanel Grid.Row="3"
+                                                               LastChildFill="False">
+                                                        <StackPanel DockPanel.Dock="Left">
+                                                            <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                                                       Text="{Binding SourceAssetSizeDisplay}" />
+                                                            <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                                                       Text="{Binding ReplacementFileSizeDisplay}" />
+                                                        </StackPanel>
+                                                        <Border DockPanel.Dock="Right"
+                                                                Tag="{Binding VisualDotState}"
+                                                                Style="{StaticResource IndicatorBorderStyle}" />
+                                                    </DockPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </ScrollViewer>
                         </Grid>
                     </Border>
 
@@ -235,125 +161,131 @@
                             Style="{StaticResource CardBorderStyle}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel>
-                                <DockPanel LastChildFill="False">
-                                    <StackPanel DockPanel.Dock="Left">
-                                        <TextBlock FontFamily="Segoe UI Variable Display"
-                                                   FontSize="22"
-                                                   FontWeight="Light"
-                                                   Text="EDIT" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   Text="Tune the selected audio, preview it, and save once to prepare or apply it."
-                                                   TextWrapping="Wrap" />
-                                    </StackPanel>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
 
-                                    <Border DockPanel.Dock="Right"
-                                            Tag="{Binding SelectedRule.StatusTone}"
-                                            Style="{StaticResource StatusBadgeBorderStyle}">
-                                        <TextBlock Tag="{Binding SelectedRule.StatusTone}"
-                                                   Style="{StaticResource StatusBadgeTextStyle}"
-                                                   Text="{Binding SelectedRule.StatusDisplay, TargetNullValue=No Selection}" />
-                                    </Border>
-                                </DockPanel>
+                                <TextBlock Grid.Row="0"
+                                           HorizontalAlignment="Center"
+                                           Style="{StaticResource PanelHeadingTextStyle}"
+                                           Text="EDIT" />
 
-                                <Border Margin="0,18,0,18"
-                                        Padding="16"
-                                        CornerRadius="12"
+                                <Border Grid.Row="1"
+                                        Margin="0,22,0,18"
+                                        Padding="18"
                                         Background="{StaticResource SurfaceBrush}"
                                         BorderBrush="{StaticResource CardBorderBrush}"
                                         BorderThickness="1">
                                     <StackPanel>
-                                        <TextBlock FontSize="20"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding SelectedRule.Name, TargetNullValue=Choose an audio card}" />
-                                        <TextBlock Margin="0,6,0,0"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   Text="{Binding SelectedRule.StatusDetailDisplay, TargetNullValue=Pick a rule on the left to begin editing.}"
-                                                   TextWrapping="Wrap" />
+                                        <TextBlock Style="{StaticResource CardTitleTextStyle}"
+                                                   Text="{Binding SelectedRule.Name, TargetNullValue=SONG 1}" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   Style="{StaticResource TinyLabelTextStyle}"
+                                                   Text="{Binding SelectedRule.SourceTypeDisplay, TargetNullValue=ARTISTS}" />
+                                        <TextBlock Margin="0,26,0,0"
+                                                   Foreground="{StaticResource BrightTextBrush}"
+                                                   FontSize="15"
+                                                   Text="{Binding SelectedRule.FileNameDisplay, TargetNullValue=UPLOADED BY: Name}" />
+                                        <TextBlock Margin="0,8,0,0"
+                                                   Foreground="{StaticResource BrightTextBrush}"
+                                                   FontSize="16"
+                                                   Text="{Binding SelectedRule.AssetIdPattern, TargetNullValue=XXXXXX}" />
                                     </StackPanel>
                                 </Border>
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <WrapPanel Grid.Row="2"
+                                           Margin="0,0,0,8">
+                                    <Button Content="PLAY"
+                                            Command="{Binding PlaySelectedRuleCommand}" />
+                                    <Button Content="STOP"
+                                            Command="{Binding StopRulePreviewCommand}" />
+                                    <Button Style="{StaticResource AccentButtonStyle}"
+                                            Content="TOGGLE"
+                                            Command="{Binding SaveAndApplySelectedRuleCommand}" />
+                                </WrapPanel>
+
+                                <CheckBox Grid.Row="3"
+                                          Margin="0,4,0,10"
+                                          IsChecked="{Binding SelectedRule.IsEnabled}"
+                                          Content="Enable Replacement" />
+
+                                <TextBlock Grid.Row="4"
+                                           Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Name" />
-                                <TextBox Text="{Binding SelectedRule.Name, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox Grid.Row="4"
+                                         Margin="0,22,0,12"
+                                         Text="{Binding SelectedRule.Name, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <TextBlock Grid.Row="5"
+                                           Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Exact Roblox asset ID" />
-                                <TextBox Text="{Binding SelectedRule.AssetIdPattern, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox Grid.Row="5"
+                                         Margin="0,22,0,12"
+                                         Text="{Binding SelectedRule.AssetIdPattern, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <TextBlock Grid.Row="6"
+                                           Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Replacement file, direct URL, or 6-letter code" />
-                                <DockPanel LastChildFill="True">
+                                <DockPanel Grid.Row="6"
+                                           Margin="0,22,0,18"
+                                           LastChildFill="True">
                                     <Button DockPanel.Dock="Right"
+                                            Width="124"
                                             Margin="12,0,0,0"
-                                            Style="{StaticResource SubtleButtonStyle}"
                                             Content="Browse File"
                                             Command="{Binding BrowseSelectedRuleCommand}" />
                                     <TextBox Text="{Binding SelectedRule.FilePath, UpdateSourceTrigger=PropertyChanged}" />
                                 </DockPanel>
 
-                                <CheckBox Margin="0,8,0,6"
-                                          IsChecked="{Binding SelectedRule.IsEnabled}"
-                                          Content="Enable replacement for this audio" />
-
-                                <UniformGrid Margin="0,12,0,16"
+                                <UniformGrid Grid.Row="7"
+                                             Margin="0,0,0,18"
                                              Columns="2">
                                     <Border Margin="0,0,8,0"
-                                            Padding="14"
-                                            CornerRadius="12"
+                                            Padding="12"
                                             Background="{StaticResource SurfaceBrush}"
                                             BorderBrush="{StaticResource CardBorderBrush}"
                                             BorderThickness="1">
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                                                       Text="Roblox Source" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       FontSize="20"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding SelectedRule.SourceAssetSizeDisplay, Mode=OneWay}" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       Foreground="{StaticResource MutedTextBrush}"
-                                                       Text="{Binding SelectedRule.AssetIdPattern, StringFormat=Asset {0}}" />
+                                            <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                                       Text="Roblox cache" />
+                                            <TextBlock Margin="0,12,0,0"
+                                                       Foreground="{StaticResource BrightTextBrush}"
+                                                       FontSize="18"
+                                                       Text="{Binding SelectedRule.SourceAssetSizeDisplay}" />
                                         </StackPanel>
                                     </Border>
-
                                     <Border Margin="8,0,0,0"
-                                            Padding="14"
-                                            CornerRadius="12"
+                                            Padding="12"
                                             Background="{StaticResource SurfaceBrush}"
                                             BorderBrush="{StaticResource CardBorderBrush}"
                                             BorderThickness="1">
                                         <StackPanel>
-                                            <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                                                       Text="Replacement Source" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       FontSize="20"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding SelectedRule.ReplacementFileSizeDisplay, Mode=OneWay}" />
-                                            <TextBlock Margin="0,6,0,0"
-                                                       Foreground="{StaticResource MutedTextBrush}"
-                                                       Text="{Binding SelectedRule.FileNameDisplay, Mode=OneWay}"
-                                                       TextWrapping="Wrap" />
-                                            <TextBlock Margin="0,4,0,0"
-                                                       Foreground="{StaticResource MutedTextBrush}"
-                                                       Text="{Binding SelectedRule.ReplacementSourceNoteDisplay, Mode=OneWay}"
-                                                       TextWrapping="Wrap" />
+                                            <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                                       Text="Replacement" />
+                                            <TextBlock Margin="0,12,0,0"
+                                                       Foreground="{StaticResource BrightTextBrush}"
+                                                       FontSize="18"
+                                                       Text="{Binding SelectedRule.ReplacementFileSizeDisplay}" />
                                         </StackPanel>
                                     </Border>
                                 </UniformGrid>
 
-                                <WrapPanel>
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Preview Rule"
-                                            Command="{Binding PlaySelectedRuleCommand}" />
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Stop Rule Preview"
-                                            Command="{Binding StopRulePreviewCommand}" />
-                                    <Button Content="Save + Apply Rule"
-                                            Command="{Binding SaveAndApplySelectedRuleCommand}" />
-                                </WrapPanel>
-                            </StackPanel>
+                                <Button Grid.Row="7"
+                                        Margin="0,108,0,0"
+                                        HorizontalAlignment="Center"
+                                        Width="190"
+                                        Height="56"
+                                        Content="RESET"
+                                        Command="{Binding RefreshCommand}" />
+                            </Grid>
                         </ScrollViewer>
                     </Border>
                 </Grid>
@@ -362,8 +294,8 @@
             <TabItem Header="UPLOADING">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.05*" />
-                        <ColumnDefinition Width="0.95*" />
+                        <ColumnDefinition Width="1.18*" />
+                        <ColumnDefinition Width="0.92*" />
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0"
@@ -372,95 +304,71 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled">
                             <StackPanel>
-                                <TextBlock FontFamily="Segoe UI Variable Display"
-                                           FontSize="22"
-                                           FontWeight="Light"
+                                <TextBlock Style="{StaticResource PanelHeadingTextStyle}"
                                            Text="UPLOADING" />
-                                <TextBlock Margin="0,6,0,18"
-                                           Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Submit a linked Roblox sound plus metadata to the index API, then verify the result from the cards on the right."
-                                           TextWrapping="Wrap" />
-
-                                <Border Padding="14"
-                                        CornerRadius="12"
-                                        Background="{StaticResource SurfaceBrush}"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                                                   Text="Device ID" />
-                                        <DockPanel Margin="0,6,0,0"
-                                                   LastChildFill="True">
-                                            <Button DockPanel.Dock="Right"
-                                                    Margin="12,0,0,0"
-                                                    Style="{StaticResource SubtleButtonStyle}"
-                                                    Content="Copy"
-                                                    Command="{Binding CopyDeviceIdCommand}" />
-                                            <TextBox Text="{Binding DeviceId}"
-                                                     IsReadOnly="True" />
-                                        </DockPanel>
-
-                                        <TextBlock Margin="0,4,0,0"
-                                                   Style="{StaticResource SectionLabelTextStyle}"
-                                                   Text="Song index base URL" />
-                                        <TextBox Margin="0,6,0,0"
-                                                 Text="{Binding SongIndexBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
-                                    </StackPanel>
-                                </Border>
-
                                 <TextBlock Margin="0,18,0,0"
-                                           Style="{StaticResource SectionLabelTextStyle}"
+                                           Style="{StaticResource TinyLabelTextStyle}"
+                                           Text="Device ID" />
+                                <DockPanel Margin="0,8,0,12"
+                                           LastChildFill="True">
+                                    <Button DockPanel.Dock="Right"
+                                            Width="88"
+                                            Margin="12,0,0,0"
+                                            Content="COPY"
+                                            Command="{Binding CopyDeviceIdCommand}" />
+                                    <TextBox Text="{Binding DeviceId}"
+                                             IsReadOnly="True" />
+                                </DockPanel>
+
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                           Text="Song index base URL" />
+                                <TextBox Text="{Binding SongIndexBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Source Roblox sound ID" />
                                 <DockPanel LastChildFill="True">
                                     <Button DockPanel.Dock="Right"
+                                            Width="104"
                                             Margin="12,0,0,0"
-                                            Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Autofill"
+                                            Content="AUTOFILL"
                                             Command="{Binding AutofillUploadFromRobloxSoundIdCommand}" />
                                     <TextBox Text="{Binding UploadRobloxSoundId, UpdateSourceTrigger=PropertyChanged}" />
                                 </DockPanel>
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                                           Text="Linked Roblox sound ID to replace" />
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                           Text="Linked Roblox sound ID" />
                                 <TextBox Text="{Binding UploadLinkedAssetId, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Direct audio URL" />
                                 <TextBox Text="{Binding UploadAudioUrl, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Song name" />
                                 <TextBox Text="{Binding UploadSongName, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Artist" />
                                 <TextBox Text="{Binding UploadArtist, UpdateSourceTrigger=PropertyChanged}" />
 
-                                <TextBlock Style="{StaticResource SectionLabelTextStyle}"
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
                                            Text="Uploader name" />
                                 <TextBox Text="{Binding UploadUploaderName, UpdateSourceTrigger=PropertyChanged}" />
 
                                 <Border Margin="0,8,0,16"
-                                        Padding="14"
-                                        CornerRadius="12"
+                                        Padding="12"
                                         Background="{StaticResource SurfaceBrush}"
                                         BorderBrush="{StaticResource CardBorderBrush}"
                                         BorderThickness="1">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionLabelTextStyle}"
-                                                   Text="Submission Status" />
-                                        <TextBlock Margin="0,8,0,0"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   Text="{Binding UploadStatusText}"
-                                                   TextWrapping="Wrap" />
-                                    </StackPanel>
+                                    <TextBlock Text="{Binding UploadStatusText}"
+                                               TextWrapping="Wrap" />
                                 </Border>
 
                                 <WrapPanel>
-                                    <Button Style="{StaticResource SubtleButtonStyle}"
-                                            Content="Preview Typed URL"
+                                    <Button Content="PREVIEW"
                                             Command="{Binding PreviewTypedAudioCommand}" />
-                                    <Button Content="Submit Link"
+                                    <Button Style="{StaticResource AccentButtonStyle}"
+                                            Content="SUBMIT"
                                             Command="{Binding UploadAudioCommand}" />
                                 </WrapPanel>
                             </StackPanel>
@@ -476,58 +384,39 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <StackPanel>
-                                <TextBlock FontFamily="Segoe UI Variable Display"
-                                           FontSize="22"
-                                           FontWeight="Light"
-                                           Text="MY SUBMISSIONS" />
-                                <TextBlock Margin="0,6,0,0"
-                                           Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Each uploaded audio shows whether it is linked back to a Roblox sound and whether the direct audio URL still looks playable."
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
+                            <TextBlock Grid.Row="0"
+                                       Style="{StaticResource PanelHeadingTextStyle}"
+                                       HorizontalAlignment="Center"
+                                       Text="MY SUBMISSIONS" />
 
                             <ListBox Grid.Row="1"
-                                     Margin="0,18,0,18"
+                                     Margin="0,20,0,18"
                                      ItemsSource="{Binding UploadedSongs}"
                                      SelectedItem="{Binding SelectedUploadedSong}"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type core:UploadedSongRecord}">
-                                        <Border Style="{StaticResource AudioCardBorderStyle}"
-                                                Width="Auto">
-                                            <StackPanel>
-                                                <DockPanel LastChildFill="False">
-                                                    <Border DockPanel.Dock="Right"
-                                                            Tag="{Binding StatusTone}"
-                                                            Style="{StaticResource StatusBadgeBorderStyle}">
-                                                        <TextBlock Tag="{Binding StatusTone}"
-                                                                   Style="{StaticResource StatusBadgeTextStyle}"
-                                                                   Text="{Binding StatusDisplay}" />
-                                                    </Border>
-                                                    <TextBlock FontSize="17"
-                                                               FontWeight="SemiBold"
+                                        <Border Style="{StaticResource LibraryTileBorderStyle}">
+                                            <DockPanel LastChildFill="True">
+                                                <StackPanel DockPanel.Dock="Left">
+                                                    <TextBlock Style="{StaticResource CardTitleTextStyle}"
+                                                               FontSize="18"
                                                                Text="{Binding SummaryDisplay}"
                                                                TextWrapping="Wrap" />
-                                                </DockPanel>
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding Code, StringFormat=Code {0}}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding LinkedAssetIdDisplay}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding UploaderDisplay}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding UploadedAtDisplay}" />
-                                                <TextBlock Margin="0,8,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding AudioUrl}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource TinyLabelTextStyle}"
+                                                               Text="{Binding Code, StringFormat=#: {0}}" />
+                                                    <TextBlock Margin="0,4,0,0"
+                                                               Style="{StaticResource TinyLabelTextStyle}"
+                                                               Text="{Binding LinkedAssetIdDisplay}" />
+                                                    <TextBlock Margin="0,4,0,0"
+                                                               Style="{StaticResource TinyLabelTextStyle}"
+                                                               Text="{Binding UploaderDisplay}" />
+                                                </StackPanel>
+                                                <Border DockPanel.Dock="Right"
+                                                        Tag="{Binding StatusTone}"
+                                                        Style="{StaticResource IndicatorBorderStyle}" />
+                                            </DockPanel>
                                         </Border>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -535,37 +424,22 @@
 
                             <Border Grid.Row="2"
                                     Padding="14"
-                                    CornerRadius="12"
                                     Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource CardBorderBrush}"
                                     BorderThickness="1">
                                 <StackPanel>
-                                    <DockPanel LastChildFill="False">
-                                        <StackPanel DockPanel.Dock="Left">
-                                            <TextBlock FontSize="18"
-                                                       FontWeight="SemiBold"
-                                                       Text="{Binding SelectedUploadedSong.SummaryDisplay, TargetNullValue=No upload selected}" />
-                                            <TextBlock Margin="0,4,0,0"
-                                                       Foreground="{StaticResource MutedTextBrush}"
-                                                       Text="{Binding PreviewStatusText}" />
-                                        </StackPanel>
-                                        <Border DockPanel.Dock="Right"
-                                                Tag="{Binding SelectedUploadedSong.StatusTone}"
-                                                Style="{StaticResource StatusBadgeBorderStyle}">
-                                            <TextBlock Tag="{Binding SelectedUploadedSong.StatusTone}"
-                                                       Style="{StaticResource StatusBadgeTextStyle}"
-                                                       Text="{Binding SelectedUploadedSong.StatusDisplay, TargetNullValue=Select One}" />
-                                        </Border>
-                                    </DockPanel>
-
+                                    <TextBlock Style="{StaticResource CardTitleTextStyle}"
+                                               FontSize="18"
+                                               Text="{Binding SelectedUploadedSong.SummaryDisplay, TargetNullValue=NO UPLOAD SELECTED}" />
+                                    <TextBlock Margin="0,8,0,0"
+                                               Text="{Binding PreviewStatusText}"
+                                               TextWrapping="Wrap" />
                                     <WrapPanel Margin="0,14,0,0">
-                                        <Button Style="{StaticResource SubtleButtonStyle}"
-                                                Content="Play Selected Upload"
+                                        <Button Content="PLAY"
                                                 Command="{Binding PreviewSelectedUploadCommand}" />
-                                        <Button Style="{StaticResource SubtleButtonStyle}"
-                                                Content="Stop Preview"
+                                        <Button Content="STOP"
                                                 Command="{Binding StopPreviewCommand}" />
-                                        <Button Content="Delete Selected Upload"
+                                        <Button Content="DELETE"
                                                 Command="{Binding DeleteSelectedUploadCommand}" />
                                     </WrapPanel>
                                 </StackPanel>
@@ -578,8 +452,8 @@
             <TabItem Header="SONG INDEX">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.05*" />
-                        <ColumnDefinition Width="0.95*" />
+                        <ColumnDefinition Width="1.28*" />
+                        <ColumnDefinition Width="0.82*" />
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0"
@@ -589,97 +463,83 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <StackPanel>
-                                <TextBlock FontFamily="Segoe UI Variable Display"
-                                           FontSize="22"
-                                           FontWeight="Light"
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.35*" />
+                                    <ColumnDefinition Width="2.15*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Style="{StaticResource PanelHeadingTextStyle}"
+                                           VerticalAlignment="Center"
                                            Text="SONG INDEX" />
-                                <TextBlock Margin="0,6,0,0"
-                                           Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Search the public index and scan each result's card for linked Roblox IDs, playable audio, and upload details."
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
 
-                            <Border Grid.Row="1"
-                                    Margin="0,18,0,14"
-                                    Padding="12"
-                                    CornerRadius="12"
-                                    Background="{StaticResource SurfaceBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1">
-                                <DockPanel LastChildFill="True">
-                                    <WrapPanel DockPanel.Dock="Right"
-                                               Margin="12,0,0,0">
-                                        <Button Style="{StaticResource SubtleButtonStyle}"
-                                                Content="All Songs"
-                                                Command="{Binding LoadAllSongsCommand}" />
-                                        <Button Content="Search"
-                                                Command="{Binding SearchSongsCommand}" />
-                                    </WrapPanel>
-                                    <TextBox Margin="0"
-                                             Text="{Binding SongSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
-                                </DockPanel>
-                            </Border>
+                                <TextBox Grid.Column="1"
+                                         Margin="18,0,12,12"
+                                         Text="{Binding SongSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
 
-                            <Border Grid.Row="2"
-                                    Margin="0,0,0,14"
-                                    Padding="12"
-                                    CornerRadius="12"
-                                    Background="{StaticResource SurfaceBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1">
-                                <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                <Button Grid.Column="2"
+                                        Width="104"
+                                        Height="46"
+                                        Margin="0,0,0,12"
+                                        Content="SEARCH"
+                                        Command="{Binding SearchSongsCommand}" />
+                            </Grid>
+
+                            <WrapPanel Grid.Row="1"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,0,0,14">
+                                <Button Content="ALL SONGS"
+                                        Command="{Binding LoadAllSongsCommand}" />
+                            </WrapPanel>
+
+                            <Grid Grid.Row="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Style="{StaticResource TinyLabelTextStyle}"
                                            Text="{Binding SongSearchStatusText}"
                                            TextWrapping="Wrap" />
-                            </Border>
 
-                            <ListBox Grid.Row="3"
-                                     ItemsSource="{Binding SongSearchResults}"
-                                     SelectedItem="{Binding SelectedSongSearchResult}"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type core:SongIndexEntry}">
-                                        <Border Style="{StaticResource AudioCardBorderStyle}"
-                                                Width="Auto">
-                                            <StackPanel>
-                                                <DockPanel LastChildFill="False">
+                                <ListBox Grid.Row="1"
+                                         Margin="0,16,0,0"
+                                         ItemsSource="{Binding SongSearchResults}"
+                                         SelectedItem="{Binding SelectedSongSearchResult}"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type core:SongIndexEntry}">
+                                            <Border Style="{StaticResource LibraryTileBorderStyle}">
+                                                <DockPanel LastChildFill="True">
+                                                    <StackPanel DockPanel.Dock="Left">
+                                                        <TextBlock Style="{StaticResource CardTitleTextStyle}"
+                                                                   FontSize="18"
+                                                                   Text="{Binding SongName}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource TinyLabelTextStyle}"
+                                                                   Text="{Binding Artist}" />
+                                                        <TextBlock Margin="0,4,0,0"
+                                                                   Style="{StaticResource TinyLabelTextStyle}"
+                                                                   Text="{Binding Code, StringFormat=#: {0}}" />
+                                                        <TextBlock Margin="0,4,0,0"
+                                                                   Style="{StaticResource TinyLabelTextStyle}"
+                                                                   Text="{Binding LinkedAssetIdDisplay}" />
+                                                    </StackPanel>
                                                     <Border DockPanel.Dock="Right"
                                                             Tag="{Binding StatusTone}"
-                                                            Style="{StaticResource StatusBadgeBorderStyle}">
-                                                        <TextBlock Tag="{Binding StatusTone}"
-                                                                   Style="{StaticResource StatusBadgeTextStyle}"
-                                                                   Text="{Binding StatusDisplay}" />
-                                                    </Border>
-                                                    <TextBlock FontSize="17"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding SongName}"
-                                                               TextWrapping="Wrap" />
+                                                            Style="{StaticResource IndicatorBorderStyle}" />
                                                 </DockPanel>
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding Artist}" />
-                                                <TextBlock Margin="0,6,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding Code, StringFormat=Code {0}}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding LinkedAssetIdDisplay}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding UploaderDisplay}" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
-                                                           Text="{Binding UploadedAtDisplay}" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
                         </Grid>
                     </Border>
 
@@ -693,94 +553,60 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <DockPanel LastChildFill="False">
-                                <StackPanel DockPanel.Dock="Left">
-                                    <TextBlock FontFamily="Segoe UI Variable Display"
-                                               FontSize="22"
-                                               FontWeight="Light"
-                                               Text="SELECTED SONG" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="Preview the selected song, copy its code, or drop it straight into the selected rule."
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-
-                                <Border DockPanel.Dock="Right"
-                                        Tag="{Binding SelectedSongSearchResult.StatusTone}"
-                                        Style="{StaticResource StatusBadgeBorderStyle}">
-                                    <TextBlock Tag="{Binding SelectedSongSearchResult.StatusTone}"
-                                               Style="{StaticResource StatusBadgeTextStyle}"
-                                               Text="{Binding SelectedSongSearchResult.StatusDisplay, TargetNullValue=Select One}" />
-                                </Border>
-                            </DockPanel>
+                            <TextBlock Grid.Row="0"
+                                       HorizontalAlignment="Center"
+                                       Style="{StaticResource PanelHeadingTextStyle}"
+                                       Text="EDIT" />
 
                             <Border Grid.Row="1"
-                                    Margin="0,18,0,14"
-                                    Padding="14"
-                                    CornerRadius="12"
+                                    Margin="0,22,0,18"
+                                    Padding="18"
                                     Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource CardBorderBrush}"
                                     BorderThickness="1">
                                 <StackPanel>
-                                    <TextBlock FontSize="20"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding SelectedSongSearchResult.SongName, TargetNullValue=No song selected}" />
-                                    <TextBlock Margin="0,6,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding SelectedSongSearchResult.Artist, TargetNullValue=Run a search or load all songs to populate the index.}" />
+                                    <TextBlock Style="{StaticResource CardTitleTextStyle}"
+                                               Text="{Binding SelectedSongSearchResult.SongName, TargetNullValue=SONG 1}" />
+                                    <TextBlock Margin="0,2,0,0"
+                                               Style="{StaticResource TinyLabelTextStyle}"
+                                               Text="{Binding SelectedSongSearchResult.Artist, TargetNullValue=ARTISTS}" />
+                                    <TextBlock Margin="0,26,0,0"
+                                               Foreground="{StaticResource BrightTextBrush}"
+                                               FontSize="15"
+                                               Text="{Binding SelectedSongSearchResult.UploaderDisplay, TargetNullValue=UPLOADED BY: Name}" />
                                     <TextBlock Margin="0,8,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding SelectedSongSearchResult.Code, StringFormat=Code {0}}" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding SelectedSongSearchResult.LinkedAssetIdDisplay}" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding SelectedSongSearchResult.UploaderDisplay}" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding SelectedSongSearchResult.UploadedAtDisplay}" />
-                                    <TextBlock Margin="0,10,0,0"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding SelectedSongSearchResult.AudioUrl}"
-                                               TextWrapping="Wrap" />
+                                               Foreground="{StaticResource BrightTextBrush}"
+                                               FontSize="16"
+                                               Text="{Binding SelectedSongSearchResult.Code, TargetNullValue=XXXXXX}" />
                                 </StackPanel>
                             </Border>
 
                             <Border Grid.Row="2"
-                                    Margin="0,0,0,14"
+                                    Margin="0,0,0,18"
                                     Padding="14"
-                                    CornerRadius="12"
                                     Background="{StaticResource SurfaceBrush}"
                                     BorderBrush="{StaticResource CardBorderBrush}"
                                     BorderThickness="1">
                                 <StackPanel>
-                                    <TextBlock FontSize="18"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding PreviewHeading}" />
-                                    <TextBlock Margin="0,4,0,10"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               Text="{Binding PreviewStatusText}"
-                                               TextWrapping="Wrap" />
-                                    <WrapPanel>
-                                        <Button Style="{StaticResource SubtleButtonStyle}"
-                                                Content="Play Song"
+                                    <TextBlock Style="{StaticResource TinyLabelTextStyle}"
+                                               Text="{Binding PreviewStatusText}" />
+                                    <WrapPanel Margin="0,14,0,0">
+                                        <Button Content="PLAY"
                                                 Command="{Binding PreviewSelectedSongSearchResultCommand}" />
-                                        <Button Style="{StaticResource SubtleButtonStyle}"
-                                                Content="Copy Code"
+                                        <Button Content="COPY"
                                                 Command="{Binding CopySelectedSongCodeCommand}" />
-                                        <Button Style="{StaticResource SubtleButtonStyle}"
-                                                Content="Stop Preview"
+                                        <Button Content="STOP"
                                                 Command="{Binding StopPreviewCommand}" />
-                                        <Button Content="Use Code In Rule"
+                                        <Button Style="{StaticResource AccentButtonStyle}"
+                                                Content="USE CODE"
                                                 Command="{Binding UseSelectedSongCodeCommand}" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Border>
 
                             <TextBlock Grid.Row="3"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       Text="Tip: when an index entry already has a linked Roblox sound ID, using its code in a rule fills in both the source reference and the target asset automatically."
+                                       Style="{StaticResource TinyLabelTextStyle}"
+                                       Text="Using a song code in a rule can fill both the source reference and its linked Roblox asset when the index entry already has one."
                                        TextWrapping="Wrap" />
                         </Grid>
                     </Border>
@@ -799,35 +625,19 @@
                             Margin="0,0,0,18"
                             Style="{StaticResource CardBorderStyle}">
                         <DockPanel LastChildFill="False">
-                            <StackPanel DockPanel.Dock="Left">
-                                <TextBlock FontFamily="Segoe UI Variable Display"
-                                           FontSize="22"
-                                           FontWeight="Light"
-                                           Text="ADVANCED" />
-                                <TextBlock Margin="0,6,0,0"
-                                           Foreground="{StaticResource MutedTextBrush}"
-                                           Text="Background checks, cache inspection, and activity logs stay here."
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <WrapPanel DockPanel.Dock="Right"
-                                       HorizontalAlignment="Right">
+                            <TextBlock DockPanel.Dock="Left"
+                                       Style="{StaticResource PanelHeadingTextStyle}"
+                                       Text="ADVANCED" />
+                            <WrapPanel DockPanel.Dock="Right">
                                 <CheckBox VerticalAlignment="Center"
                                           IsChecked="{Binding UseDarkMode}"
                                           Content="Dark mode" />
                                 <CheckBox VerticalAlignment="Center"
                                           IsChecked="{Binding AutoApplyCacheReplacements}"
-                                          Content="Auto-apply on re-fetch" />
-                                <Button Style="{StaticResource SubtleButtonStyle}"
-                                        Content="Apply All"
-                                        Command="{Binding ApplyAllRulesCommand}" />
-                                <Button Style="{StaticResource SubtleButtonStyle}"
-                                        Content="Prepare Enabled"
+                                          Content="Auto-apply" />
+                                <Button Content="PREPARE"
                                         Command="{Binding PrepareRuleAssetsCommand}" />
-                                <Button Style="{StaticResource SubtleButtonStyle}"
-                                        Content="Reset + Refresh"
-                                        Command="{Binding RefreshCommand}" />
-                                <Button Content="Save"
+                                <Button Content="SAVE"
                                         Command="{Binding SaveConfigurationCommand}" />
                             </WrapPanel>
                         </DockPanel>
@@ -842,12 +652,12 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Text="Cached Sounds" />
+                            <TextBlock Style="{StaticResource PanelHeadingTextStyle}"
+                                       FontSize="22"
+                                       Text="CACHED SOUNDS" />
 
                             <DataGrid Grid.Row="1"
-                                      Margin="0,14,0,0"
+                                      Margin="0,16,0,0"
                                       ItemsSource="{Binding CachedSoundFiles}"
                                       AutoGenerateColumns="False"
                                       CanUserAddRows="False"
@@ -868,7 +678,7 @@
                                                         Width="1.1*" />
                                     <DataGridTextColumn Header="State"
                                                         Binding="{Binding StatusText}"
-                                                        Width="120" />
+                                                        Width="110" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Grid>
@@ -882,32 +692,30 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Text="Activity" />
+                            <TextBlock Style="{StaticResource PanelHeadingTextStyle}"
+                                       FontSize="22"
+                                       Text="ACTIVITY" />
 
                             <ListBox Grid.Row="1"
-                                     Margin="0,14,0,0"
+                                     Margin="0,16,0,0"
                                      ItemsSource="{Binding Activity}"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type core:ActivityLogEntry}">
-                                        <Border Margin="0,0,0,8"
+                                        <Border Margin="0,0,0,10"
                                                 Padding="12"
-                                                CornerRadius="12"
                                                 Background="{StaticResource SurfaceAltBrush}"
                                                 BorderBrush="{StaticResource CardBorderBrush}"
                                                 BorderThickness="1">
                                             <DockPanel>
                                                 <TextBlock DockPanel.Dock="Left"
+                                                           Foreground="{StaticResource BrightTextBrush}"
                                                            FontWeight="SemiBold"
                                                            Text="{Binding Category}" />
                                                 <TextBlock DockPanel.Dock="Right"
-                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Style="{StaticResource TinyLabelTextStyle}"
                                                            Text="{Binding Timestamp, StringFormat={}{0:hh:mm:ss tt}}" />
                                                 <TextBlock Margin="0,22,0,0"
-                                                           Foreground="{StaticResource MutedTextBrush}"
                                                            Text="{Binding Message}"
                                                            TextWrapping="Wrap" />
                                             </DockPanel>

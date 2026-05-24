@@ -19,6 +19,8 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     private DateTimeOffset? preparedAt;
     private int preparationVersion;
     private bool replacementSourceWasConverted;
+    private bool isOriginalPresentInCache;
+    private bool isReplacementPresentInCache;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -115,6 +117,20 @@ public sealed class ReplacementRule : INotifyPropertyChanged
     }
 
     [JsonIgnore]
+    public bool IsOriginalPresentInCache
+    {
+        get => isOriginalPresentInCache;
+        set => SetField(ref isOriginalPresentInCache, value);
+    }
+
+    [JsonIgnore]
+    public bool IsReplacementPresentInCache
+    {
+        get => isReplacementPresentInCache;
+        set => SetField(ref isReplacementPresentInCache, value);
+    }
+
+    [JsonIgnore]
     public string SourceAssetSizeDisplay => FormatKilobytes(SourceAssetLength);
 
     [JsonIgnore]
@@ -197,6 +213,26 @@ public sealed class ReplacementRule : INotifyPropertyChanged
                 ? "Prepared and ready to replace matching cache audio."
                 : "Save and apply this rule to prepare it.";
 
+    [JsonIgnore]
+    public string VisualState => !IsEnabled
+        ? "Inactive"
+        : IsReplacementPresentInCache
+            ? "Active"
+            : IsOriginalPresentInCache
+                ? "Ready"
+                : "Inactive";
+
+    [JsonIgnore]
+    public string VisualDotState => !IsEnabled
+        ? "Muted"
+        : IsReplacementPresentInCache
+            ? "Active"
+            : IsOriginalPresentInCache
+                ? "Ready"
+                : HasSourceReference(FilePath)
+                    ? "Standby"
+                    : "Muted";
+
     public static int LatestPreparationVersion => CurrentPreparationVersion;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -263,12 +299,16 @@ public sealed class ReplacementRule : INotifyPropertyChanged
             || string.Equals(propertyName, nameof(ReplacementFileLength), StringComparison.Ordinal)
             || string.Equals(propertyName, nameof(PreparedAt), StringComparison.Ordinal)
             || string.Equals(propertyName, nameof(PreparationVersion), StringComparison.Ordinal)
-            || string.Equals(propertyName, nameof(ReplacementSourceWasConverted), StringComparison.Ordinal))
+            || string.Equals(propertyName, nameof(ReplacementSourceWasConverted), StringComparison.Ordinal)
+            || string.Equals(propertyName, nameof(IsOriginalPresentInCache), StringComparison.Ordinal)
+            || string.Equals(propertyName, nameof(IsReplacementPresentInCache), StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(IsPrepared));
             OnPropertyChanged(nameof(StatusDisplay));
             OnPropertyChanged(nameof(StatusTone));
             OnPropertyChanged(nameof(StatusDetailDisplay));
+            OnPropertyChanged(nameof(VisualState));
+            OnPropertyChanged(nameof(VisualDotState));
         }
 
         if (string.Equals(propertyName, nameof(FilePath), StringComparison.Ordinal))
@@ -278,6 +318,7 @@ public sealed class ReplacementRule : INotifyPropertyChanged
             OnPropertyChanged(nameof(StatusDisplay));
             OnPropertyChanged(nameof(StatusTone));
             OnPropertyChanged(nameof(StatusDetailDisplay));
+            OnPropertyChanged(nameof(VisualDotState));
         }
 
         if (string.Equals(propertyName, nameof(ReplacementSourceWasConverted), StringComparison.Ordinal))

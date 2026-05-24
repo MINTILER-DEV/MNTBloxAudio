@@ -6,6 +6,8 @@ public sealed class RobloxSoundCacheEntry
 
     public string FullPath { get; init; } = string.Empty;
 
+    public bool IsNewlyDetected { get; init; }
+
     public long Length { get; init; }
 
     public DateTimeOffset LastWriteTime { get; init; }

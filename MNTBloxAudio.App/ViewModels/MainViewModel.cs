@@ -13,6 +13,19 @@ namespace MNTBloxAudio.App.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
+    private sealed class RecentAssetSignal
+    {
+        public string AssetId { get; init; } = string.Empty;
+
+        public DateTimeOffset ObservedAt { get; init; }
+
+        public string Source { get; init; } = string.Empty;
+    }
+
+    private static readonly TimeSpan RecentAssetSignalLifetime = TimeSpan.FromSeconds(5);
+    private const int LocalHotApplyDelayMilliseconds = 50;
+    private static readonly TimeSpan CacheReplacementRetryWindow = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan CacheReplacementRetryDelay = TimeSpan.FromMilliseconds(300);
     private readonly SemaphoreSlim playbackLock = new(1, 1);
     private readonly SettingsStore settingsStore;
     private readonly AudioDeviceService deviceService;
@@ -26,6 +39,7 @@ public partial class MainViewModel : ObservableObject
     private readonly SongIndexService songIndexService;
     private readonly Lock monitorStateLock = new();
     private readonly HashSet<ReplacementRule> observedCacheRules = [];
+    private readonly Queue<RecentAssetSignal> recentAssetSignals = [];
 
     private AppSettings settings = new();
     private bool initializationComplete;
@@ -156,6 +170,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string songSearchStatusText = "Search songs from the public index API.";
 
+    [ObservableProperty]
+    private string ruleSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private bool showEnabledRulesOnly;
+
     public MainViewModel(
         SettingsStore settingsStore,
         AudioDeviceService deviceService,
@@ -187,6 +207,24 @@ public partial class MainViewModel : ObservableObject
 
     public int RuleCount => Rules.Count;
 
+    public IEnumerable<ReplacementRule> VisibleRules => Rules.Where(rule =>
+    {
+        if (ShowEnabledRulesOnly && !rule.IsEnabled)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(RuleSearchQuery))
+        {
+            return true;
+        }
+
+        var query = RuleSearchQuery.Trim();
+        return (rule.Name?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (rule.AssetIdPattern?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (rule.FilePath?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false);
+    });
+
     public string SelectedOutputDeviceName => SelectedOutputDevice?.Name ?? "System default";
 
     public string OutputVolumeLabel => $"{OutputVolumePercent}%";
@@ -213,7 +251,7 @@ public partial class MainViewModel : ObservableObject
         EnableProxyFallback = false;
         EnableExperimentalProxyReplacement = false;
         AutoReplaceOnDetection = true;
-        AutoApplyCacheReplacements = settings.AutoApplyCacheReplacements;
+        AutoApplyCacheReplacements = settings.AutoApplyCacheReplacements || settings.Rules.Any(rule => rule.IsEnabled);
         AutoMuteRobloxDuringPlayback = settings.AutoMuteRobloxDuringPlayback;
         AutoRestoreRobloxAfterPlayback = settings.AutoRestoreRobloxAfterPlayback;
         ProxyPort = settings.ProxyPort;
@@ -243,6 +281,7 @@ public partial class MainViewModel : ObservableObject
             ReplacementSourceWasConverted = rule.ReplacementSourceWasConverted,
         }));
         AttachRuleEvents(Rules);
+        OnPropertyChanged(nameof(VisibleRules));
 
         UploadedSongs = new ObservableCollection<UploadedSongRecord>(settings.UploadedSongs
             .Where(IsValidUploadedSong)
@@ -329,6 +368,12 @@ public partial class MainViewModel : ObservableObject
     private Task Refresh() => ResetAndRefreshAsync();
 
     [RelayCommand]
+    private void ToggleRuleFilter()
+    {
+        ShowEnabledRulesOnly = !ShowEnabledRulesOnly;
+    }
+
+    [RelayCommand]
     private async Task AddRuleAsync()
     {
         var rule = new ReplacementRule
@@ -342,6 +387,7 @@ public partial class MainViewModel : ObservableObject
         SelectedRule = rule;
         proxyService.UpdateRules(Rules);
         OnPropertyChanged(nameof(RuleCount));
+        OnPropertyChanged(nameof(VisibleRules));
         AddActivity("Rules", $"Added {rule.Name}.");
         await SaveConfigurationAsync();
     }
@@ -361,6 +407,7 @@ public partial class MainViewModel : ObservableObject
         SelectedRule = Rules.FirstOrDefault();
         proxyService.UpdateRules(Rules);
         OnPropertyChanged(nameof(RuleCount));
+        OnPropertyChanged(nameof(VisibleRules));
         AddActivity("Rules", $"Removed {removedRuleName}.");
         await SaveConfigurationAsync();
     }
@@ -889,6 +936,7 @@ public partial class MainViewModel : ObservableObject
             Rules.Add(rule);
             AttachRuleEvents(rule);
             OnPropertyChanged(nameof(RuleCount));
+            OnPropertyChanged(nameof(VisibleRules));
         }
 
         SelectedRule = Rules.FirstOrDefault();
@@ -1077,6 +1125,7 @@ public partial class MainViewModel : ObservableObject
 
     private async Task HandleResolvedAssetAsync(RobloxAssetResolutionInfo resolution)
     {
+        RememberRecentAssetSignal(resolution.AssetId, "player log");
         AddActivity("Log", $"Roblox resolved asset {resolution.AssetId}.");
 
         if (AutoApplyCacheReplacements)
@@ -1087,11 +1136,26 @@ public partial class MainViewModel : ObservableObject
 
     private async Task HandleCacheEntryAsync(RobloxSoundCacheEntry cacheEntry)
     {
-        AddActivity("Cache", $"Roblox sound cache updated: {cacheEntry.FileName}");
+        AddActivity(
+            "Cache",
+            cacheEntry.IsNewlyDetected
+                ? $"Roblox created a new sound cache file: {cacheEntry.FileName}"
+                : $"Roblox sound cache updated: {cacheEntry.FileName}");
 
         if (AutoApplyCacheReplacements)
         {
-            await TryApplyPreparedReplacementToCacheEntryAsync(cacheEntry, "cache refresh");
+            if (cacheEntry.IsNewlyDetected)
+            {
+                var autoDetectedApply = await TryApplyRecentAssetReplacementToNewCacheEntryAsync(cacheEntry);
+                if (autoDetectedApply)
+                {
+                    return;
+                }
+            }
+
+            await TryApplyPreparedReplacementToCacheEntryAsync(
+                cacheEntry,
+                cacheEntry.IsNewlyDetected ? "cache hot-detect" : "cache refresh");
         }
     }
 
@@ -1132,6 +1196,7 @@ public partial class MainViewModel : ObservableObject
 
     private async void OnAssetDetected(object? sender, ProxyAssetDetectedEventArgs eventArgs)
     {
+        RememberRecentAssetSignal(eventArgs.AssetId, "proxy");
         var matchedRule = Rules.FirstOrDefault(rule =>
             rule.IsEnabled
             && HasReplacementSource(rule)
@@ -1262,6 +1327,7 @@ public partial class MainViewModel : ObservableObject
     {
         var snapshot = soundCacheService.GetSoundCacheSnapshot();
         var cacheRulesChanged = HandleRuleCachePresence(snapshot);
+        ApplyRuleVisualStates(snapshot);
         var annotated = snapshot
             .Select(AnnotateCacheEntry)
             .ToList();
@@ -1274,6 +1340,20 @@ public partial class MainViewModel : ObservableObject
         if (cacheRulesChanged)
         {
             await SaveConfigurationAsync(logActivity: false);
+        }
+    }
+
+    private void ApplyRuleVisualStates(IReadOnlyList<RobloxSoundCacheEntry> snapshot)
+    {
+        foreach (var rule in Rules)
+        {
+            var originalPresent = !string.IsNullOrWhiteSpace(rule.SourceAssetHash)
+                && snapshot.Any(entry => string.Equals(entry.Sha256, rule.SourceAssetHash, StringComparison.OrdinalIgnoreCase));
+            var replacementPresent = !string.IsNullOrWhiteSpace(rule.ReplacementFileHash)
+                && snapshot.Any(entry => string.Equals(entry.Sha256, rule.ReplacementFileHash, StringComparison.OrdinalIgnoreCase));
+
+            rule.IsOriginalPresentInCache = originalPresent;
+            rule.IsReplacementPresentInCache = replacementPresent;
         }
     }
 
@@ -1334,6 +1414,40 @@ public partial class MainViewModel : ObservableObject
         };
     }
 
+    private async Task HandleRuleEnabledStateChangedAsync(ReplacementRule rule)
+    {
+        try
+        {
+            if (rule.IsEnabled)
+            {
+                AutoApplyCacheReplacements = true;
+
+                var prepared = await EnsureRulePreparedAsync(rule, logSkipMessage: false);
+                await SaveConfigurationAsync(logActivity: false);
+                if (prepared)
+                {
+                    await ApplyPreparedCacheReplacementsAsync("enable toggle", TryGetExactAssetId(rule.AssetIdPattern));
+                    AddActivity("Rules", $"Enabled {rule.Name} and rechecked the Roblox sound cache.");
+                }
+
+                return;
+            }
+
+            var restoredCount = await RestoreRuleToOriginalAsync(rule, "disable toggle");
+            await UpdateCachedSoundFilesAsync();
+            await SaveConfigurationAsync(logActivity: false);
+            AddActivity(
+                "Rules",
+                restoredCount > 0
+                    ? $"Disabled {rule.Name} and restored {restoredCount} cached file(s) to the original audio."
+                    : $"Disabled {rule.Name}.");
+        }
+        catch (Exception exception)
+        {
+            AddActivity("Rules", $"Could not update {rule.Name} after toggling it: {exception.Message}");
+        }
+    }
+
     private async Task ApplyPreparedCacheReplacementsAsync(string reason, string? specificAssetId = null)
     {
         var snapshot = soundCacheService.GetSoundCacheSnapshot();
@@ -1392,7 +1506,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var cacheEntry in snapshot.Where(entry =>
                      string.Equals(entry.Sha256, rule.ReplacementFileHash, StringComparison.OrdinalIgnoreCase)))
         {
-            if (!soundCacheService.RestoreSoundFile(cacheEntry.FullPath))
+            if (!await RestoreCacheFileWhenAvailableAsync(cacheEntry.FullPath))
             {
                 AddActivity("Cache", $"Skipped restoring {cacheEntry.FileName} because Roblox is still using it.");
                 continue;
@@ -1412,7 +1526,7 @@ public partial class MainViewModel : ObservableObject
 
         foreach (var cacheEntry in snapshot)
         {
-            if (!soundCacheService.RestoreSoundFile(cacheEntry.FullPath))
+            if (!await RestoreCacheFileWhenAvailableAsync(cacheEntry.FullPath))
             {
                 continue;
             }
@@ -1444,12 +1558,6 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
 
-        if (!CanOverwriteCacheFile(cacheEntry.FullPath))
-        {
-            AddActivity("Cache", $"Skipped {cacheEntry.FileName} because Roblox appears to be using it already.");
-            return false;
-        }
-
         var replacementSource = await ResolveReplacementSourceAsync(matchedRule, forceRefreshRemote: false);
         if (replacementSource is null)
         {
@@ -1457,9 +1565,9 @@ public partial class MainViewModel : ObservableObject
             return false;
         }
 
-        if (!soundCacheService.ReplaceSoundFile(cacheEntry.FullPath, replacementSource.LocalPath))
+        if (!await ReplaceCacheFileWhenAvailableAsync(cacheEntry.FullPath, replacementSource.LocalPath))
         {
-            AddActivity("Cache", $"Skipped {cacheEntry.FileName} because it became busy while trying to replace it.");
+            AddActivity("Cache", $"Skipped {cacheEntry.FileName} because Roblox kept it busy for too long while trying to replace it.");
             return false;
         }
 
@@ -1470,6 +1578,79 @@ public partial class MainViewModel : ObservableObject
         return true;
     }
 
+    private async Task<bool> TryApplyRecentAssetReplacementToNewCacheEntryAsync(RobloxSoundCacheEntry cacheEntry)
+    {
+        var assetSignal = TryTakeRecentAssetSignalForHotApply();
+        if (assetSignal is null)
+        {
+            return false;
+        }
+
+        var matchedRule = FindEnabledExactRule(assetSignal.AssetId);
+        if (matchedRule is null)
+        {
+            return false;
+        }
+
+        if (ShouldDelayHotApplyForRule(matchedRule))
+        {
+            await Task.Delay(LocalHotApplyDelayMilliseconds);
+        }
+
+        var replacementSource = await ResolveReplacementSourceAsync(matchedRule, forceRefreshRemote: false);
+        if (replacementSource is null)
+        {
+            AddActivity("Cache", $"Skipped hot-apply for {matchedRule.Name} because its replacement source could not be resolved.");
+            return false;
+        }
+
+        if (!await ReplaceCacheFileWhenAvailableAsync(cacheEntry.FullPath, replacementSource.LocalPath))
+        {
+            AddActivity(
+                "Cache",
+                $"New cache file {cacheEntry.FileName} matched asset {assetSignal.AssetId}, but Roblox kept it busy before {matchedRule.Name} could be applied.");
+            return false;
+        }
+
+        AddActivity(
+            "Cache",
+            $"Auto-detected {cacheEntry.FileName} for asset {assetSignal.AssetId} from {assetSignal.Source} and applied {matchedRule.Name} immediately.");
+        await UpdateCachedSoundFilesAsync();
+        return true;
+    }
+
+    private async Task<bool> ReplaceCacheFileWhenAvailableAsync(string cacheFilePath, string replacementFilePath)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        while (DateTimeOffset.UtcNow - startedAt < CacheReplacementRetryWindow)
+        {
+            if (soundCacheService.ReplaceSoundFile(cacheFilePath, replacementFilePath))
+            {
+                return true;
+            }
+
+            await Task.Delay(CacheReplacementRetryDelay);
+        }
+
+        return false;
+    }
+
+    private async Task<bool> RestoreCacheFileWhenAvailableAsync(string cacheFilePath)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        while (DateTimeOffset.UtcNow - startedAt < CacheReplacementRetryWindow)
+        {
+            if (soundCacheService.RestoreSoundFile(cacheFilePath))
+            {
+                return true;
+            }
+
+            await Task.Delay(CacheReplacementRetryDelay);
+        }
+
+        return false;
+    }
+
     private void OnRulePropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
         if (sender is not ReplacementRule rule)
@@ -1477,10 +1658,18 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        OnPropertyChanged(nameof(VisibleRules));
+
         if (string.Equals(eventArgs.PropertyName, nameof(ReplacementRule.AssetIdPattern), StringComparison.Ordinal)
             || string.Equals(eventArgs.PropertyName, nameof(ReplacementRule.FilePath), StringComparison.Ordinal))
         {
             InvalidatePreparedState(rule);
+        }
+
+        if (string.Equals(eventArgs.PropertyName, nameof(ReplacementRule.IsEnabled), StringComparison.Ordinal)
+            && initializationComplete)
+        {
+            _ = Task.Run(() => HandleRuleEnabledStateChangedAsync(rule));
         }
     }
 
@@ -1544,23 +1733,6 @@ public partial class MainViewModel : ObservableObject
         return rule.IsPrepared && HasReplacementSource(rule);
     }
 
-    private static bool CanOverwriteCacheFile(string filePath)
-    {
-        try
-        {
-            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-            return true;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
     private static void InvalidatePreparedState(ReplacementRule rule)
     {
         rule.SourceAssetHash = string.Empty;
@@ -1609,6 +1781,85 @@ public partial class MainViewModel : ObservableObject
         return Uri.TryCreate(source, UriKind.Absolute, out var uri)
             && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private ReplacementRule? FindEnabledExactRule(string assetId)
+    {
+        return Rules.FirstOrDefault(rule =>
+            rule.IsEnabled
+            && HasReplacementSource(rule)
+            && string.Equals(TryGetExactAssetId(rule.AssetIdPattern), assetId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void RememberRecentAssetSignal(string assetId, string source)
+    {
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            return;
+        }
+
+        lock (monitorStateLock)
+        {
+            PruneRecentAssetSignals(DateTimeOffset.UtcNow);
+
+            var lastSignal = recentAssetSignals.LastOrDefault();
+            if (lastSignal is not null
+                && string.Equals(lastSignal.AssetId, assetId, StringComparison.OrdinalIgnoreCase)
+                && (DateTimeOffset.UtcNow - lastSignal.ObservedAt) <= TimeSpan.FromMilliseconds(250))
+            {
+                return;
+            }
+
+            recentAssetSignals.Enqueue(new RecentAssetSignal
+            {
+                AssetId = assetId,
+                ObservedAt = DateTimeOffset.UtcNow,
+                Source = source,
+            });
+
+            while (recentAssetSignals.Count > 32)
+            {
+                recentAssetSignals.Dequeue();
+            }
+        }
+    }
+
+    private RecentAssetSignal? TryTakeRecentAssetSignalForHotApply()
+    {
+        lock (monitorStateLock)
+        {
+            PruneRecentAssetSignals(DateTimeOffset.UtcNow);
+
+            while (recentAssetSignals.Count > 0)
+            {
+                var nextSignal = recentAssetSignals.Peek();
+                if (FindEnabledExactRule(nextSignal.AssetId) is null)
+                {
+                    recentAssetSignals.Dequeue();
+                    continue;
+                }
+
+                return recentAssetSignals.Dequeue();
+            }
+
+            return null;
+        }
+    }
+
+    private void PruneRecentAssetSignals(DateTimeOffset now)
+    {
+        while (recentAssetSignals.Count > 0
+            && now - recentAssetSignals.Peek().ObservedAt > RecentAssetSignalLifetime)
+        {
+            recentAssetSignals.Dequeue();
+        }
+    }
+
+    private static bool ShouldDelayHotApplyForRule(ReplacementRule rule)
+    {
+        return !string.IsNullOrWhiteSpace(rule.FilePath)
+            && !SongIndexService.LooksLikeSongCode(rule.FilePath)
+            && !IsRemoteReplacementSource(rule.FilePath);
     }
 
     private bool HandleRuleCachePresence(IReadOnlyList<RobloxSoundCacheEntry> snapshot)
@@ -1777,6 +2028,16 @@ public partial class MainViewModel : ObservableObject
     partial void OnPreviewAudioSourceChanged(Uri? value)
     {
         OnPropertyChanged(nameof(HasPreviewAudio));
+    }
+
+    partial void OnRuleSearchQueryChanged(string value)
+    {
+        OnPropertyChanged(nameof(VisibleRules));
+    }
+
+    partial void OnShowEnabledRulesOnlyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(VisibleRules));
     }
 
     partial void OnAutoApplyCacheReplacementsChanged(bool value)

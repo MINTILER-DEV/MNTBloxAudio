@@ -55,12 +55,21 @@ public sealed class RobloxSoundCacheService
         var changes = new List<RobloxSoundCacheEntry>();
         foreach (var file in files)
         {
-            if (!knownFiles.TryGetValue(file.FullPath, out var existing)
+            var isNewFile = !knownFiles.TryGetValue(file.FullPath, out var existing);
+            if (isNewFile
                 || existing.LastWriteTime != file.LastWriteTime
                 || existing.Length != file.Length)
             {
                 knownFiles[file.FullPath] = (file.LastWriteTime, file.Length);
-                changes.Add(file);
+                changes.Add(new RobloxSoundCacheEntry
+                {
+                    FileName = file.FileName,
+                    FullPath = file.FullPath,
+                    IsNewlyDetected = isNewFile,
+                    Length = file.Length,
+                    LastWriteTime = file.LastWriteTime,
+                    Sha256 = ComputeFileHash(file.FullPath),
+                });
             }
         }
 
@@ -84,6 +93,7 @@ public sealed class RobloxSoundCacheService
                 {
                     FileName = info.Name,
                     FullPath = info.FullName,
+                    IsNewlyDetected = false,
                     Length = info.Length,
                     LastWriteTime = info.LastWriteTime,
                     Sha256 = ComputeFileHash(info.FullName),
@@ -123,8 +133,7 @@ public sealed class RobloxSoundCacheService
                 File.Copy(cacheFilePath, backupPath, overwrite: false);
             }
 
-            var replacementBytes = File.ReadAllBytes(replacementFilePath);
-            File.WriteAllBytes(cacheFilePath, replacementBytes);
+            OverwriteFileContents(replacementFilePath, cacheFilePath);
 
             var updatedInfo = new FileInfo(cacheFilePath);
             hashCache.Remove(cacheFilePath);
@@ -151,7 +160,7 @@ public sealed class RobloxSoundCacheService
 
         try
         {
-            File.Copy(backupPath, cacheFilePath, overwrite: true);
+            OverwriteFileContents(backupPath, cacheFilePath);
 
             var updatedInfo = new FileInfo(cacheFilePath);
             hashCache.Remove(cacheFilePath);
@@ -166,5 +175,23 @@ public sealed class RobloxSoundCacheService
         {
             return false;
         }
+    }
+
+    private static void OverwriteFileContents(string sourceFilePath, string destinationFilePath)
+    {
+        using var sourceStream = new FileStream(
+            sourceFilePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var destinationStream = new FileStream(
+            destinationFilePath,
+            FileMode.Open,
+            FileAccess.Write,
+            FileShare.ReadWrite | FileShare.Delete);
+
+        destinationStream.SetLength(0);
+        sourceStream.CopyTo(destinationStream);
+        destinationStream.Flush(flushToDisk: true);
     }
 }
