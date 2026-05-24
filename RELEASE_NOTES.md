@@ -1,3 +1,33 @@
+# MNTBloxAudio 1.2.2
+
+Mockup-matching UI refresh with stronger cache auto-replacement behavior.
+
+## UI Refresh
+
+- Reworks the main app layout to match the darker mockup-style interface more closely
+- Updates My Audio into a card-based browser with a right-side edit panel
+- Carries the same visual language into the Uploading and Song Index tabs
+- Uses visual rule states instead of direct status text on audio cards
+
+## Audio State Colors
+
+- Blue outlines now represent audio that is enabled and actively replaced in Roblox's cache
+- Adds a separate ready color for rules that match the original Roblox cache and are prepared to replace it
+- Keeps inactive or original rules in a muted gray state
+- Adds runtime rule state tracking so the UI reflects whether a rule is currently original, ready, or active
+
+## Automatic Cache Replacement
+
+- Enabling a rule now also turns on automatic cache re-checks for new Roblox sound files
+- Newly detected cache entries are checked against recent asset detections and enabled prepared rules
+- If Roblox is still using a cache file, the app now waits and retries for a short window instead of immediately giving up
+- Disabling a rule restores matching replaced cache entries back to the original Roblox audio when possible
+
+## Notes
+
+- Automatic replacement still depends on Roblox having downloaded the target sound into `%TEMP%\Roblox\sounds`
+- If Roblox keeps a cache file locked for too long, the app will eventually stop retrying and log the skip in Activity
+
 # MNTBloxAudio 1.2.1
 
 Song index targeting update with linked Roblox sound IDs and improved preview controls.
