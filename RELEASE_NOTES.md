@@ -1,4 +1,10 @@
-﻿# MNTBloxAudio 1.3.0
+﻿# 1.3.1
+
+- Fixed disabled sounds remaining stuck on restoration while unrelated Roblox audio was playing. Restore now depends only on exclusive access to the affected cache file.
+- Distinguish real file locks from missing/corrupt original backups and permission errors, with automatic retries after recovery.
+- Cache restoration continues even if querying Roblox audio sessions fails.
+
+# MNTBloxAudio 1.3.0
 
 - Replaced the rule editor workflow with Search and Stored tabs, rounded search, inline actions, previews, keyboard search, and reduced-motion-aware transitions.
 - Added automatic preparation, cache replacement, unlimited locked-file retries, and durable restoration after disabling or removing sounds.
@@ -7,7 +13,7 @@
 - Updated MNTBloxIndex search, API query support, dependencies, and production deployment.
 - Validated with cache/update regression checks and rendered WPF layouts.
 
-Restoration conservatively waits for overall Roblox audio silence and exclusive file access. Per-asset playback cannot be identified through Windows audio sessions.
+In 1.3.0, restoration conservatively waited for overall Roblox audio silence and exclusive file access (fixed in 1.3.1). Per-asset playback cannot be identified through Windows audio sessions.
 
 # MNTBloxAudio 1.2.2
 

@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace MNTBloxAudio.Core.Services;
 
 public sealed record PreparedCacheRule(string AssetId, string OriginalHash, string ReplacementHash, string LocalPath);
-public sealed record CacheSyncResult(HashSet<string> AppliedAssets, HashSet<string> PendingAssets);
+public sealed record CacheSyncResult(HashSet<string> AppliedAssets, HashSet<string> PendingAssets, Dictionary<string, string> Errors);
 
 /// <summary>Serial, durable cache reconciliation. Never infer asset identity from request timing.</summary>
 public sealed class AutomaticCacheService
@@ -28,20 +28,24 @@ public sealed class AutomaticCacheService
             : new(StringComparer.OrdinalIgnoreCase);
     }
 
-    public CacheSyncResult Synchronize(IReadOnlyList<PreparedCacheRule> desired, bool robloxAudioBusy)
+    public CacheSyncResult Synchronize(IReadOnlyList<PreparedCacheRule> desired)
     {
         var applied = new HashSet<string>();
         var pending = new HashSet<string>();
-        if (!Directory.Exists(cacheDirectory)) return new(applied, pending);
+        var errors = new Dictionary<string, string>();
+        if (!Directory.Exists(cacheDirectory)) return new(applied, pending, errors);
 
         foreach (var path in Directory.EnumerateFiles(cacheDirectory, "RBX*"))
         {
             var name = Path.GetFileName(path);
             replacements.TryGetValue(name, out var previous);
+            var operationAsset = previous?.AssetId;
+            var cacheOpened = false;
             try
             {
                 // FileShare.None prevents writing while Roblox holds a handle, even a shared read handle.
                 using var file = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                cacheOpened = true;
                 var hash = Hash(file);
                 if (previous is not null)
                 {
@@ -53,8 +57,10 @@ public sealed class AutomaticCacheService
                     }
                     if (hash == previous.ReplacementHash)
                     {
-                        if (robloxAudioBusy) { pending.Add(previous.AssetId); continue; }
+                        // Exclusive access is the file-specific gate. Unrelated Roblox audio must
+                        // not prevent restoration; audio already decoded in memory is unaffected.
                         var backup = Path.Combine(backupDirectory, previous.OriginalHash + ".original");
+                        if (!File.Exists(backup)) throw new IOException("Original backup is missing. Restore it to the sound-cache-backups folder to retry.");
                         WriteVerified(file, backup, previous.OriginalHash);
                         hash = previous.OriginalHash;
                     }
@@ -65,6 +71,7 @@ public sealed class AutomaticCacheService
 
                 var match = desired.FirstOrDefault(rule => rule.OriginalHash == hash && rule.ReplacementHash != hash);
                 if (match is null || !File.Exists(match.LocalPath)) continue;
+                operationAsset = match.AssetId;
                 var backupPath = Path.Combine(backupDirectory, hash + ".original");
                 if (!File.Exists(backupPath))
                 {
@@ -79,10 +86,20 @@ public sealed class AutomaticCacheService
                 WriteVerified(file, match.LocalPath, match.ReplacementHash);
                 applied.Add(match.AssetId);
             }
-            catch (IOException) { if (previous is not null) pending.Add(previous.AssetId); }
-            catch (UnauthorizedAccessException) { if (previous is not null) pending.Add(previous.AssetId); }
+            catch (IOException exception) when (!cacheOpened && (exception.HResult & 0xFFFF) is 32 or 33)
+            {
+                if (operationAsset is not null) pending.Add(operationAsset);
+            }
+            catch (IOException exception)
+            {
+                if (operationAsset is not null) errors[operationAsset] = exception.Message;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                if (operationAsset is not null) errors[operationAsset] = "Access denied to the cache file or original backup. Check file permissions.";
+            }
         }
-        return new(applied, pending);
+        return new(applied, pending, errors);
     }
 
     public void ImportLegacyBackups(IReadOnlyList<PreparedCacheRule> knownRules)
@@ -126,7 +143,7 @@ public sealed class AutomaticCacheService
     private static void WriteVerified(FileStream destination, string sourcePath, string expectedHash)
     {
         using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (Hash(source) != expectedHash) throw new IOException("Audio changed since preparation; waiting for a verified source.");
+        if (Hash(source) != expectedHash) throw new IOException("Audio integrity check failed: the source or original backup has changed. No audio was overwritten.");
         // Keep the current bytes for rollback if a write fails midway.
         using var rollback = new MemoryStream();
         destination.Position = 0;

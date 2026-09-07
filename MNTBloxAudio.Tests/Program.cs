@@ -32,38 +32,39 @@ internal static class Program
             var second = new PreparedCacheRule("2", Hash("original-two"), Hash("replacement"), source);
             var engine = new AutomaticCacheService(cachePath, statePath);
             File.WriteAllText(path, "original-one"); File.WriteAllText(other, "original-two");
-            engine.Synchronize([first, second], false);
+            engine.Synchronize([first, second]);
             Check(File.ReadAllText(path) == "replacement" && File.ReadAllText(other) == "replacement", "Auto apply both exact originals");
-            var result = engine.Synchronize([second], true);
-            Check(result.PendingAssets.Contains("1") && File.ReadAllText(path) == "replacement", "Defer restore while Roblox plays");
+            var result = engine.Synchronize([second]);
+            Check(!result.PendingAssets.Contains("1") && File.ReadAllText(path) == "original-one", "Restore a free cache file even while unrelated Roblox audio plays");
+            engine.Synchronize([first, second]);
             using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                for (var i = 0; i < 40; i++) Check(engine.Synchronize([second], false).PendingAssets.Contains("1"), "Retry locked file indefinitely");
+                for (var i = 0; i < 40; i++) Check(engine.Synchronize([second]).PendingAssets.Contains("1"), "Retry locked file indefinitely");
             engine = new AutomaticCacheService(cachePath, statePath);
-            engine.Synchronize([second], false);
+            engine.Synchronize([second]);
             Check(File.ReadAllText(path) == "original-one", "Restore after restart and release");
             Check(File.ReadAllText(other) == "replacement", "Identical replacements retain separate owners");
-            engine.Synchronize([first, second], false);
+            engine.Synchronize([first, second]);
             File.WriteAllText(path, "unrelated Roblox content");
-            engine.Synchronize([second], false);
+            engine.Synchronize([second]);
             Check(File.ReadAllText(path) == "unrelated Roblox content", "Do not overwrite reused cache filename");
-            File.Delete(path); engine.Synchronize([first, second], false);
-            File.WriteAllText(path, "original-one"); engine.Synchronize([first, second], false);
+            File.Delete(path); engine.Synchronize([first, second]);
+            File.WriteAllText(path, "original-one"); engine.Synchronize([first, second]);
             Check(File.ReadAllText(path) == "replacement", "Reapply after cache eviction without disabling rule");
-            engine.Synchronize([], false);
+            engine.Synchronize([]);
             Check(File.ReadAllText(path) == "original-one" && File.ReadAllText(other) == "original-two", "Removing all rules restores exact originals");
-            File.WriteAllText(source, "tampered"); engine.Synchronize([first], false);
+            File.WriteAllText(source, "tampered"); engine.Synchronize([first]);
             Check(File.ReadAllText(path) == "original-one", "Reject changed source before writing");
             File.WriteAllText(source, "replacement");
             using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                engine.Synchronize([first], false);
+                engine.Synchronize([first]);
             Check(File.ReadAllText(path) == "original-one", "Never replace an open cache file");
-            engine.Synchronize([first], false);
+            engine.Synchronize([first]);
             Check(File.ReadAllText(path) == "replacement", "Apply when original file is released");
             var legacyPath = Path.Combine(cachePath, "RBXlegacy"); File.WriteAllText(legacyPath, "replacement");
             File.WriteAllText(Path.Combine(statePath, "sound-cache-backups", "RBXlegacy.bak"), "original-two");
-            engine.ImportLegacyBackups([second]); engine.Synchronize([], false);
+            engine.ImportLegacyBackups([second]); engine.Synchronize([]);
             Check(File.ReadAllText(legacyPath) == "original-two", "Migrate old backups for disabled rules");
-            Check(GitHubUpdateService.TryParseStableVersion("v1.3.1", out var v) && v > GitHubUpdateService.CurrentVersion, "Compare stable release versions");
+            Check(GitHubUpdateService.TryParseStableVersion("v1.3.1", out var v) && v == new Version(1, 3, 1), "Compare stable release versions");
             Check(!GitHubUpdateService.TryParseStableVersion("v1.4.0-beta", out _), "Reject prerelease tags");
             Check(!GitHubUpdateService.TryParseStableVersion("unknown", out _), "Reject malformed tags");
             var existingDeviceId = "MNT_existing-123";
@@ -73,11 +74,53 @@ internal static class Program
             var uploadUri = DeviceIdentityService.BuildUploadUri("https://mntbloxindex.vercel.app/", existingDeviceId);
             Check(uploadUri.AbsolutePath == "/upload.html" && uploadUri.Query == "", "Open upload without putting device identity in server query logs");
             Check(uploadUri.Fragment == "#deviceId=MNT_existing-123", "Pass the saved app identity to the browser fragment");
+            TestRestoreFailures(root);
             TestUpdater(root).GetAwaiter().GetResult();
             Console.WriteLine($"PASS: {assertions} cache recovery and update assertions");
             RenderUi();
         }
         finally { Directory.Delete(root, true); }
+    }
+    private static void TestRestoreFailures(string root)
+    {
+        var cachePath = Path.Combine(root, "restore-failures"); Directory.CreateDirectory(cachePath);
+        var statePath = Path.Combine(root, "restore-state");
+        var path = Path.Combine(cachePath, "RBXrestore");
+        var source = Path.Combine(root, "restore-source.mp3");
+        File.WriteAllText(path, "original"); File.WriteAllText(source, "replacement");
+        var rule = new PreparedCacheRule("restore-test", Hash("original"), Hash("replacement"), source);
+        var engine = new AutomaticCacheService(cachePath, statePath);
+        engine.Synchronize([rule]);
+        var backup = Path.Combine(statePath, "sound-cache-backups", Hash("original") + ".original");
+        File.Delete(backup);
+        var result = engine.Synchronize([]);
+        Check(result.Errors.ContainsKey(rule.AssetId) && !result.PendingAssets.Contains(rule.AssetId), "Missing backup is an error, not a busy-file wait");
+        Check(File.ReadAllText(path) == "replacement", "Missing backup does not destroy cached audio");
+        File.WriteAllText(backup, "corrupt");
+        result = engine.Synchronize([]);
+        Check(result.Errors.ContainsKey(rule.AssetId) && !result.PendingAssets.Contains(rule.AssetId), "Corrupt backup is an error, not a busy-file wait");
+        Check(File.ReadAllText(path) == "replacement", "Corrupt backup is rejected before touching audio");
+        File.WriteAllText(backup, "original");
+        result = engine.Synchronize([]);
+        Check(result.Errors.Count == 0 && File.ReadAllText(path) == "original", "Restoration recovers when a valid backup returns");
+        engine.Synchronize([rule]);
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            result = engine.Synchronize([]);
+            Check(result.Errors.ContainsKey(rule.AssetId) && !result.PendingAssets.Contains(rule.AssetId), "Permission failure is not mislabeled as audio playing");
+        }
+        finally { File.SetAttributes(path, FileAttributes.Normal); }
+        result = engine.Synchronize([]);
+        Check(result.Errors.Count == 0 && File.ReadAllText(path) == "original", "Restoration retries after permissions recover");
+        engine.Synchronize([rule]);
+        using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            result = engine.Synchronize([]);
+            Check(result.PendingAssets.Contains(rule.AssetId) && result.Errors.Count == 0, "An actual open handle remains queued without errors");
+        }
+        result = engine.Synchronize([]);
+        Check(result.PendingAssets.Count == 0 && File.ReadAllText(path) == "original", "Restore on the first pass after handle release");
     }
     private sealed class ReleaseHandler(string tag, string digest, bool prerelease = false, string url = "https://github.com/MINTILER-DEV/MNTBloxAudio/releases/download/v999.0.0/MNTBloxAudio.exe") : HttpMessageHandler
     {

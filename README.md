@@ -12,7 +12,7 @@ Enabling prepares the source in the background and watches `%TEMP%\Roblox\sounds
 
 Disabling or removing a sound queues restoration of its original. The queue survives application restarts and retries without a time limit while the app is open. Keep MNTBloxAudio open for automatic replacement and restoration.
 
-Windows exposes overall Roblox audio activity, not playback of individual asset IDs. Restoration therefore waits for 1.5 seconds of overall Roblox silence and exclusive file access; other Roblox audio can delay restoration. Sounds already decoded into Roblox memory cannot be changed retroactively. The new cached bytes take effect when Roblox reads the file again.
+Windows exposes overall Roblox audio activity, not playback of individual asset IDs. Restoration checks exclusive access to the specific cache file on every monitor pass; other Roblox sounds do not block it. Missing or damaged backups and permission errors are reported separately from files that are still open. Sounds already decoded into Roblox memory cannot be changed retroactively. The new cached bytes take effect when Roblox reads the file again.
 
 ## Share audio and device ID
 

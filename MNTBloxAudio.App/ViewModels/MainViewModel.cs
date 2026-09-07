@@ -166,7 +166,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var other in Rules.Where(other => other != rule && other.AssetIdPattern == rule.AssetIdPattern)) other.IsEnabled = false;
         retryAt.Remove(rule);
         await SaveAsync();
-        Status = rule.IsEnabled ? "Enabled. Audio will be prepared and applied automatically when cached." : "Disabled. The original will return once Roblox audio is quiet and the file is free.";
+        Status = rule.IsEnabled ? "Enabled. Audio will be prepared and applied automatically when cached." : "Disabled. Restoring the original as soon as its cache file is free.";
         NotifyLibrary();
     
         }
@@ -281,14 +281,17 @@ public partial class MainViewModel : ObservableObject
 
     private async Task ReconcileAsync(CancellationToken token)
     {
-        var currentSessions = await Task.Run(sessions.GetRobloxSessions, token);
+        await SynchronizeAsync(token);
+        IReadOnlyList<RobloxAudioSessionInfo> currentSessions;
+        try { currentSessions = await Task.Run(sessions.GetRobloxSessions, token); }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch { currentSessions = []; }
         // Peak alone cannot identify an individual Roblox asset. Be conservative while any audio is audible.
         if (currentSessions.Any(session => session.PeakMeter > 0.001f)) lastAudioActivity = DateTimeOffset.UtcNow;
         var busy = currentSessions.Count > 0 && DateTimeOffset.UtcNow - lastAudioActivity < TimeSpan.FromSeconds(1.5);
         MonitorStatus = currentSessions.Count == 0 ? "Watching for Roblox" : busy ? "Roblox audio is playing" : "Roblox connected · watching cache";
 
-        // Reconcile first so a slow download never delays a pending restore.
-        await SynchronizeAsync(busy, token);
+        // Preparation stays independent of cache restoration.
         if (preparationTask is null || preparationTask.IsCompleted)
             preparationTask = PrepareEnabledAsync(token);
     }
@@ -330,7 +333,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private async Task SynchronizeAsync(bool busy, CancellationToken token)
+    private async Task SynchronizeAsync(CancellationToken token)
     {
         await cacheGate.WaitAsync(token);
         try
@@ -340,10 +343,11 @@ public partial class MainViewModel : ObservableObject
             var desired = Rules.Where(rule => rule.IsEnabled).Select(rule =>
                 prepared.TryGetValue(rule, out var ready) && ready.Source == rule.FilePath && ready.Asset == rule.AssetIdPattern
                     ? ready.Prepared : new PreparedCacheRule(rule.AssetIdPattern, rule.SourceAssetHash, rule.ReplacementFileHash, "")).ToArray();
-            var result = await Task.Run(() => { cache.ImportLegacyBackups(known); return cache.Synchronize(desired, busy); }, token);
+            var result = await Task.Run(() => { cache.ImportLegacyBackups(known); return cache.Synchronize(desired); }, token);
             foreach (var rule in Rules)
             {
-                if (!rule.IsEnabled) rule.AutomationStatus = result.PendingAssets.Contains(rule.AssetIdPattern) ? "Restoring when Roblox releases audio..." : "Stored - disabled";
+                if (result.Errors.TryGetValue(rule.AssetIdPattern, out var error)) rule.AutomationStatus = $"{(rule.IsEnabled ? "Replacement" : "Restore")} failed - {error}";
+                else if (!rule.IsEnabled) rule.AutomationStatus = result.PendingAssets.Contains(rule.AssetIdPattern) ? "Waiting for the cache file to be released - retrying automatically" : "Stored - disabled";
                 else if (result.AppliedAssets.Contains(rule.AssetIdPattern)) rule.AutomationStatus = "Enabled - replaced";
                 else if (prepared.ContainsKey(rule)) rule.AutomationStatus = "Enabled - waiting for cached audio";
             }
