@@ -1,4 +1,4 @@
-﻿# 1.3.1
+﻿# MNTBloxAudio 1.3.1
 
 - Fixed disabled sounds remaining stuck on restoration while unrelated Roblox audio was playing. Restore now depends only on exclusive access to the affected cache file.
 - Distinguish real file locks from missing/corrupt original backups and permission errors, with automatic retries after recovery.
