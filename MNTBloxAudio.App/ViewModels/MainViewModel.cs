@@ -50,6 +50,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string editorAssetId = "";
     [ObservableProperty] private string editorSource = "";
     [ObservableProperty] private string editorName = "";
+    [ObservableProperty] private string deviceId = "";
     public string VersionLabel => $"v{GitHubUpdateService.CurrentVersion.ToString(3)}";
     public bool HasSelectedSong => SelectedSong is not null;
     public bool HasSelectedRule => SelectedRule is not null;
@@ -70,12 +71,17 @@ public partial class MainViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         settings = await settingsStore.LoadAsync();
+        DeviceId = DeviceIdentityService.GetOrCreate(settings.DeviceId);
+        settings.DeviceId = DeviceId;
         foreach (var rule in settings.Rules)
         {
             Rules.Add(rule);
             rule.PropertyChanged += RuleChanged;
         }
         initialized = true;
+        await SaveAsync();
+        OpenIndexCommand.NotifyCanExecuteChanged();
+        CopyDeviceIdCommand.NotifyCanExecuteChanged();
         NotifyLibrary();
         Status = "Store a song for later, or enable it to replace audio automatically.";
         monitorTask = MonitorAsync(lifetime.Token);
@@ -244,7 +250,23 @@ public partial class MainViewModel : ObservableObject
         await Task.CompletedTask;
     }
     [RelayCommand] private void StopPreview() => PreviewAudioSource = null;
-    [RelayCommand] private void OpenIndex() => Process.Start(new ProcessStartInfo(new Uri(new Uri(index.GetSiteBaseUrl(settings.SongIndexBaseUrl)), "upload.html").AbsoluteUri) { UseShellExecute = true });
+    private bool CanUseDeviceId() => initialized && !string.IsNullOrWhiteSpace(DeviceId);
+    [RelayCommand(CanExecute = nameof(CanUseDeviceId))]
+    private void OpenIndex()
+    {
+        try
+        {
+            var uri = DeviceIdentityService.BuildUploadUri(index.GetSiteBaseUrl(settings.SongIndexBaseUrl), DeviceId);
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch (Exception) { Status = "Couldn't open your browser. Copy your device ID and visit mntbloxindex.vercel.app/upload.html."; }
+    }
+    [RelayCommand(CanExecute = nameof(CanUseDeviceId))]
+    private void CopyDeviceId()
+    {
+        try { Clipboard.SetText(DeviceId); Status = "Device ID copied. The upload page also remembers it for your next visit."; }
+        catch (Exception) { Status = "Clipboard is busy. Try copying the device ID again."; }
+    }
 
     private async Task MonitorAsync(CancellationToken token)
     {

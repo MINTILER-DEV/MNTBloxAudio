@@ -14,6 +14,12 @@ Disabling or removing a sound queues restoration of its original. The queue surv
 
 Windows exposes overall Roblox audio activity, not playback of individual asset IDs. Restoration therefore waits for 1.5 seconds of overall Roblox silence and exclusive file access; other Roblox audio can delay restoration. Sounds already decoded into Roblox memory cannot be changed retroactively. The new cached bytes take effect when Roblox reads the file again.
 
+## Share audio and device ID
+
+**Share audio** opens the upload page with your saved app device ID filled automatically. New installations create and save an ID on startup. The browser remembers that ID for later direct visits, and **Copy device ID** in the app or **Copy ID** on the upload page lets you reuse it elsewhere. You can also paste a copied ID into the upload page.
+
+The app passes the ID in the URL fragment; the page saves it locally and removes it from the address bar. A first browser-only visit creates an ID automatically. If browser storage or clipboard access is unavailable, the page keeps the current ID usable and offers manual copying.
+
 ## Updates
 
 The published `MNTBloxAudio.exe` automatically checks stable GitHub Releases from `MINTILER-DEV/MNTBloxAudio` on startup, downloads newer releases, and verifies the SHA-256 digest and size provided by GitHub. Choose **Restart to update** to install. The helper waits for the application to save and exit, atomically replaces the executable, and keeps a `.previous` backup. Settings and recovery data stay in AppData.

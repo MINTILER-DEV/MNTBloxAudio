@@ -66,6 +66,13 @@ internal static class Program
             Check(GitHubUpdateService.TryParseStableVersion("v1.3.1", out var v) && v > GitHubUpdateService.CurrentVersion, "Compare stable release versions");
             Check(!GitHubUpdateService.TryParseStableVersion("v1.4.0-beta", out _), "Reject prerelease tags");
             Check(!GitHubUpdateService.TryParseStableVersion("unknown", out _), "Reject malformed tags");
+            var existingDeviceId = "MNT_existing-123";
+            Check(DeviceIdentityService.GetOrCreate(existingDeviceId) == existingDeviceId, "Keep the existing device identity");
+            var generatedDeviceId = DeviceIdentityService.GetOrCreate("");
+            Check(Guid.TryParseExact(generatedDeviceId, "N", out _), "Generate an identity for new app installs");
+            var uploadUri = DeviceIdentityService.BuildUploadUri("https://mntbloxindex.vercel.app/", existingDeviceId);
+            Check(uploadUri.AbsolutePath == "/upload.html" && uploadUri.Query == "", "Open upload without putting device identity in server query logs");
+            Check(uploadUri.Fragment == "#deviceId=MNT_existing-123", "Pass the saved app identity to the browser fragment");
             TestUpdater(root).GetAwaiter().GetResult();
             Console.WriteLine($"PASS: {assertions} cache recovery and update assertions");
             RenderUi();
