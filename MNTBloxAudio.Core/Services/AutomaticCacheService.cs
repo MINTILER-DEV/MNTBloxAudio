@@ -64,7 +64,7 @@ public sealed class AutomaticCacheService
                 }
 
                 var match = desired.FirstOrDefault(rule => rule.OriginalHash == hash && rule.ReplacementHash != hash);
-                if (match is null) continue;
+                if (match is null || !File.Exists(match.LocalPath)) continue;
                 var backupPath = Path.Combine(backupDirectory, hash + ".original");
                 if (!File.Exists(backupPath))
                 {

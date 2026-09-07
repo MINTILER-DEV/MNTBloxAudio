@@ -47,10 +47,10 @@ public sealed class SongIndexService
             return null;
         }
 
-        var document = await LoadIndexAsync(configuredBaseUrl, cancellationToken).ConfigureAwait(false);
-        var match = document.Songs.FirstOrDefault(entry =>
-            string.Equals(entry.Code, normalizedCode, StringComparison.OrdinalIgnoreCase));
-
+        using var response = await HttpClient.GetAsync(new Uri(BuildSiteBaseUri(configuredBaseUrl), $"api/songs/{normalizedCode}"), cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        var match = await response.Content.ReadFromJsonAsync<SongIndexEntry>(cancellationToken).ConfigureAwait(false);
         return match is null ? null : NormalizeUrls(match, configuredBaseUrl);
     }
 
@@ -59,8 +59,10 @@ public sealed class SongIndexService
         string? configuredBaseUrl = null,
         CancellationToken cancellationToken = default)
     {
-        var document = await LoadIndexAsync(configuredBaseUrl, cancellationToken).ConfigureAwait(false);
         var normalizedQuery = (query ?? string.Empty).Trim();
+        if (normalizedQuery.Length > 200) throw new ArgumentException("Keep searches under 200 characters.");
+        var uri = new Uri(BuildSiteBaseUri(configuredBaseUrl), $"api/index?q={Uri.EscapeDataString(normalizedQuery)}");
+        var document = await HttpClient.GetFromJsonAsync<SongIndexDocument>(uri, cancellationToken).ConfigureAwait(false) ?? new SongIndexDocument();
 
         var normalizedSongs = document.Songs
             .Select(entry => NormalizeUrls(entry, configuredBaseUrl))
@@ -75,7 +77,6 @@ public sealed class SongIndexService
         }
 
         return normalizedSongs
-            .Where(entry => MatchesSearch(entry, normalizedQuery))
             .OrderByDescending(entry => entry.UploadedAt ?? DateTimeOffset.MinValue)
             .ThenBy(entry => entry.SongName, StringComparer.OrdinalIgnoreCase)
             .ToList();

@@ -12,6 +12,7 @@ public sealed class SettingsStore
     };
 
     private readonly string settingsPath;
+    private readonly SemaphoreSlim saveLock = new(1, 1);
 
     public SettingsStore()
     {
@@ -35,9 +36,16 @@ public sealed class SettingsStore
 
     public async Task SaveAsync(AppSettings settings)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-
-        await using var stream = File.Create(settingsPath);
-        await JsonSerializer.SerializeAsync(stream, settings, SerializerOptions).ConfigureAwait(false);
+        // Snapshot before awaiting so rapid toggles cannot mutate an in-flight serialization.
+        var json = JsonSerializer.Serialize(settings, SerializerOptions);
+        await saveLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+            var temporary = settingsPath + ".tmp";
+            await File.WriteAllTextAsync(temporary, json).ConfigureAwait(false);
+            File.Move(temporary, settingsPath, true);
+        }
+        finally { saveLock.Release(); }
     }
 }

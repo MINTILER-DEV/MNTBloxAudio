@@ -68,7 +68,7 @@ public sealed class GitHubUpdateService
         if (stagedPath is null || stagedHash is null) throw new InvalidOperationException("No verified update is ready.");
         var executable = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate this application.");
         if (!Path.GetFileName(executable).Equals("MNTBloxAudio.exe", StringComparison.OrdinalIgnoreCase)
-            || File.Exists(Path.Combine(AppContext.BaseDirectory, "MNTBloxAudio.App.dll")))
+            || File.Exists(Path.Combine(AppContext.BaseDirectory, "MNTBloxAudio.dll")))
             throw new InvalidOperationException("Run the published MNTBloxAudio.exe to install updates.");
         var arguments = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
         {
@@ -80,16 +80,18 @@ public sealed class GitHubUpdateService
             $log = Join-Path (Split-Path -LiteralPath $update.source) 'install.log'
             $backup = $update.target + '.previous'
             $incoming = $update.target + '.update'
+            $installed = $false
             try {
                 if ((Get-FileHash -LiteralPath $update.source -Algorithm SHA256).Hash -ne $update.hash) { throw 'Update checksum changed.' }
                 $running = Get-Process -Id $update.processId -ErrorAction SilentlyContinue
                 if ($running) { if (-not $running.WaitForExit(120000)) { throw 'Application did not exit.' } }
                 Copy-Item -LiteralPath $update.source -Destination $incoming -Force
                 [IO.File]::Replace($incoming, $update.target, $backup)
+                $installed = $true
                 Start-Process -FilePath $update.target -WorkingDirectory (Split-Path -LiteralPath $update.target)
             } catch {
                 $_ | Out-File -LiteralPath $log
-                if (Test-Path -LiteralPath $backup) { Copy-Item -LiteralPath $backup -Destination $update.target -Force }
+                if ($installed -and (Test-Path -LiteralPath $backup)) { Copy-Item -LiteralPath $backup -Destination $update.target -Force }
             }
             """.Replace("__DATA__", arguments, StringComparison.Ordinal);
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
