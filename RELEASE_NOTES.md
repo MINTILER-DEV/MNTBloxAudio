@@ -1,4 +1,4 @@
-﻿# 1.3.0
+﻿# MNTBloxAudio 1.3.0
 
 - Replaced the rule editor workflow with Search and Stored tabs, rounded search, inline actions, previews, keyboard search, and reduced-motion-aware transitions.
 - Added automatic preparation, cache replacement, unlimited locked-file retries, and durable restoration after disabling or removing sounds.
