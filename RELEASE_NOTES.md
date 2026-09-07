@@ -1,4 +1,4 @@
-﻿# 1.3.2
+﻿# MNTBloxAudio 1.3.2
 
 - Fixed startup crashes caused by empty, truncated, or invalid settings and cache recovery JSON.
 - Save flushed, atomic primary files and backup copies; recover the saved library, device ID, and replacement ownership from a valid backup when possible.
