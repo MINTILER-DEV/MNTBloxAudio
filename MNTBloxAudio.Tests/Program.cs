@@ -1,4 +1,7 @@
 ﻿using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Text.Json;
 using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Media;
@@ -63,10 +66,41 @@ internal static class Program
             Check(GitHubUpdateService.TryParseStableVersion("v1.3.1", out var v) && v > GitHubUpdateService.CurrentVersion, "Compare stable release versions");
             Check(!GitHubUpdateService.TryParseStableVersion("v1.4.0-beta", out _), "Reject prerelease tags");
             Check(!GitHubUpdateService.TryParseStableVersion("unknown", out _), "Reject malformed tags");
+            TestUpdater(root).GetAwaiter().GetResult();
             Console.WriteLine($"PASS: {assertions} cache recovery and update assertions");
             RenderUi();
         }
         finally { Directory.Delete(root, true); }
+    }
+    private sealed class ReleaseHandler(string tag, string digest, bool prerelease = false, string url = "https://github.com/MINTILER-DEV/MNTBloxAudio/releases/download/v999.0.0/MNTBloxAudio.exe") : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            if (request.RequestUri!.Host == "api.github.com")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new
+                {
+                    tag_name = tag, draft = false, prerelease, assets = new[] { new { name = "MNTBloxAudio.exe", browser_download_url = url, digest, size = 11 } }
+                })) });
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("replacement") });
+        }
+    }
+    private static async Task TestUpdater(string root)
+    {
+        using var good = new HttpClient(new ReleaseHandler("v999.0.0", "sha256:" + Hash("replacement")));
+        Check(await new GitHubUpdateService(good, Path.Combine(root, "updates")).StageLatestAsync(default), "Stage newer verified release");
+        using var old = new HttpClient(new ReleaseHandler("v1.0.0", "sha256:" + Hash("replacement")));
+        Check(!await new GitHubUpdateService(old, root).StageLatestAsync(default), "Never downgrade");
+        using var preview = new HttpClient(new ReleaseHandler("v999.0.0", "sha256:" + Hash("replacement"), true));
+        Check(!await new GitHubUpdateService(preview, root).StageLatestAsync(default), "Skip prerelease metadata");
+        foreach (var digest in new[] { "", "sha256:" + Hash("tampered") })
+        {
+            using var bad = new HttpClient(new ReleaseHandler("v999.0.0", digest));
+            try { await new GitHubUpdateService(bad, root).StageLatestAsync(default); throw new Exception("Unverified update accepted"); }
+            catch (InvalidDataException) { assertions++; }
+        }
+        using var wrongRepo = new HttpClient(new ReleaseHandler("v999.0.0", "sha256:" + Hash("replacement"), url: "https://example.test/MNTBloxAudio.exe"));
+        try { await new GitHubUpdateService(wrongRepo, root).StageLatestAsync(default); throw new Exception("Foreign update accepted"); }
+        catch (InvalidDataException) { assertions++; }
     }
     private static void RenderUi()
     {
@@ -79,6 +113,7 @@ internal static class Program
         var output = Path.GetFullPath("artifacts/ui"); Directory.CreateDirectory(output);
         void Render(string name)
         {
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
             grid.Measure(new Size(1056, 730)); grid.Arrange(new Rect(0, 0, 1056, 730)); grid.UpdateLayout();
             var bitmap = new RenderTargetBitmap(1056, 730, 96, 96, PixelFormats.Pbgra32); bitmap.Render(grid);
             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));

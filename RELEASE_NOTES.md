@@ -1,3 +1,14 @@
+﻿# 1.3.0
+
+- Replaced the rule editor workflow with Search and Stored tabs, rounded search, inline actions, previews, keyboard search, and reduced-motion-aware transitions.
+- Added automatic preparation, cache replacement, unlimited locked-file retries, and durable restoration after disabling or removing sounds.
+- Kept enabled sounds active across cache eviction; replacement ownership and verified originals prevent cross-restoring unrelated audio.
+- Added verified GitHub Release downloads and restart-to-install updates, plus a tag-based Windows release workflow.
+- Updated MNTBloxIndex search, API query support, dependencies, and production deployment.
+- Validated with cache/update regression checks and rendered WPF layouts.
+
+Restoration conservatively waits for overall Roblox audio silence and exclusive file access. Per-asset playback cannot be identified through Windows audio sessions.
+
 # MNTBloxAudio 1.2.2
 
 Mockup-matching UI refresh with stronger cache auto-replacement behavior.

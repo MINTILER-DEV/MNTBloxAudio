@@ -14,15 +14,23 @@ public sealed class GitHubUpdateService
     public static Version CurrentVersion => Assembly.GetExecutingAssembly().GetName().Version ?? new Version(1, 3, 0);
     private const string Repository = "MINTILER-DEV/MNTBloxAudio";
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromMinutes(5) };
+    private readonly HttpClient client;
+    private readonly string updatesDirectory;
     private string? stagedPath;
     private string? stagedHash;
+
+    public GitHubUpdateService(HttpClient? client = null, string? updatesDirectory = null)
+    {
+        this.client = client ?? Client;
+        this.updatesDirectory = updatesDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MNTBloxAudio", "updates");
+    }
 
     public async Task<bool> StageLatestAsync(CancellationToken token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repository}/releases/latest");
         request.Headers.UserAgent.ParseAdd($"MNTBloxAudio/{CurrentVersion.ToString(3)}");
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
-        using var response = await Client.SendAsync(request, token);
+        using var response = await client.SendAsync(request, token);
         if (response.StatusCode == HttpStatusCode.NotFound) return false;
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
@@ -35,10 +43,10 @@ public sealed class GitHubUpdateService
         if (!url.StartsWith($"https://github.com/{Repository}/releases/download/", StringComparison.Ordinal)) throw new InvalidDataException("Unexpected update source.");
         var digest = asset.TryGetProperty("digest", out var hash) ? hash.GetString() : null;
         if (digest is null || !digest.StartsWith("sha256:") || digest.Length != 71) throw new InvalidDataException("Release has no SHA-256 digest.");
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MNTBloxAudio", "updates", latest.ToString());
+        var directory = Path.Combine(updatesDirectory, latest.ToString());
         Directory.CreateDirectory(directory);
         var downloadPath = Path.Combine(directory, "MNTBloxAudio.exe.download");
-        using var download = await Client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+        using var download = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
         download.EnsureSuccessStatusCode();
         await using (var destination = File.Create(downloadPath))
         {

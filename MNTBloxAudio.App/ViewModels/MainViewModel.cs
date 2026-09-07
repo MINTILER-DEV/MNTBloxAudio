@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Windows;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -23,7 +24,7 @@ public partial class MainViewModel : ObservableObject
     private readonly GitHubUpdateService updater = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly SemaphoreSlim cacheGate = new(1, 1);
-    private readonly Dictionary<ReplacementRule, (string Source, string Asset, PreparedCacheRule Prepared)> prepared = [];
+    private readonly Dictionary<ReplacementRule, (string Source, string Asset, PreparedCacheRule Prepared, DateTime LastWrite)> prepared = [];
     private readonly Dictionary<ReplacementRule, DateTimeOffset> retryAt = [];
     private AppSettings settings = new();
     private Task? monitorTask;
@@ -57,8 +58,14 @@ public partial class MainViewModel : ObservableObject
     public string SongToggleLabel => FindStoredSong()?.IsEnabled == true ? "Disable" : "Enable replacement";
     public string RuleToggleLabel => SelectedRule?.IsEnabled == true ? "Disable" : "Enable replacement";
     public bool LibraryEmpty => Rules.Count == 0;
-    public IEnumerable<ReplacementRule> VisibleRules => Rules.Where(rule =>
-        string.IsNullOrWhiteSpace(StoredQuery) || $"{rule.Name} {rule.AssetIdPattern} {rule.FilePath}".Contains(StoredQuery.Trim(), StringComparison.OrdinalIgnoreCase));
+    public ICollectionView VisibleRules { get; }
+    public MainViewModel()
+    {
+        VisibleRules = CollectionViewSource.GetDefaultView(Rules);
+        VisibleRules.Filter = item => item is ReplacementRule rule && (string.IsNullOrWhiteSpace(StoredQuery)
+            || $"{rule.Name} {rule.AssetIdPattern} {rule.FilePath}".Contains(StoredQuery.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
 
     public async Task InitializeAsync()
     {
@@ -237,7 +244,7 @@ public partial class MainViewModel : ObservableObject
         await Task.CompletedTask;
     }
     [RelayCommand] private void StopPreview() => PreviewAudioSource = null;
-    [RelayCommand] private void OpenIndex() => Process.Start(new ProcessStartInfo(index.GetSiteBaseUrl(settings.SongIndexBaseUrl)) { UseShellExecute = true });
+    [RelayCommand] private void OpenIndex() => Process.Start(new ProcessStartInfo(new Uri(new Uri(index.GetSiteBaseUrl(settings.SongIndexBaseUrl)), "upload.html").AbsoluteUri) { UseShellExecute = true });
 
     private async Task MonitorAsync(CancellationToken token)
     {
@@ -268,7 +275,7 @@ public partial class MainViewModel : ObservableObject
     {
         foreach (var rule in Rules.Where(rule => rule.IsEnabled).ToArray())
         {
-            if (prepared.TryGetValue(rule, out var ready) && ready.Source == rule.FilePath && ready.Asset == rule.AssetIdPattern && File.Exists(ready.Prepared.LocalPath)) continue;
+            if (prepared.TryGetValue(rule, out var ready) && ready.Source == rule.FilePath && ready.Asset == rule.AssetIdPattern && File.Exists(ready.Prepared.LocalPath) && File.GetLastWriteTimeUtc(ready.Prepared.LocalPath) == ready.LastWrite) continue;
             if (retryAt.TryGetValue(rule, out var retry) && retry > DateTimeOffset.UtcNow) continue;
             var sourceReference = rule.FilePath;
             var assetId = rule.AssetIdPattern;
@@ -289,7 +296,7 @@ public partial class MainViewModel : ObservableObject
                 rule.ReplacementFileLength = resolved.Length;
                 rule.PreparationVersion = ReplacementRule.LatestPreparationVersion;
                 rule.PreparedAt = DateTimeOffset.Now;
-                prepared[rule] = (sourceReference, assetId, new(assetId, original.Sha256, hash, resolved.LocalPath));
+                prepared[rule] = (sourceReference, assetId, new(assetId, original.Sha256, hash, resolved.LocalPath), File.GetLastWriteTimeUtc(resolved.LocalPath));
                 await SaveAsync();
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -335,10 +342,10 @@ public partial class MainViewModel : ObservableObject
     }
     private void NotifyLibrary()
     {
-        OnPropertyChanged(nameof(VisibleRules)); OnPropertyChanged(nameof(LibraryEmpty));
+        OnPropertyChanged(nameof(LibraryEmpty));
         OnPropertyChanged(nameof(SelectedSongStored)); OnPropertyChanged(nameof(SongToggleLabel)); OnPropertyChanged(nameof(RuleToggleLabel));
     }
-    partial void OnStoredQueryChanged(string value) => OnPropertyChanged(nameof(VisibleRules));
+    partial void OnStoredQueryChanged(string value) => VisibleRules.Refresh();
     partial void OnSelectedSongChanged(SongIndexEntry? value)
     {
         TargetAssetId = value?.LinkedAssetId ?? "";

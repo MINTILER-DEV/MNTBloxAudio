@@ -1,104 +1,43 @@
-# MNTBloxAudio
+﻿# MNTBloxAudio
 
-Windows desktop app for local Roblox audio replacement.
+A simpler Windows app for local Roblox audio replacement.
 
-The app watches Roblox's local sound cache in `%TEMP%\Roblox\sounds`, matches cached `RBX...` files against prepared Roblox asset IDs, and swaps the cached file contents with your own local audio.
+## Use it
 
-## How it works
+1. Open **Search**. Enter a song, artist, Roblox sound ID, or six-letter song code and press Enter or Search.
+2. Select a result. **Store for later** saves it without changing Roblox. **Enable replacement** stores and enables it in one step.
+3. Open **Stored** to enable, disable, edit, or remove your sounds. **Local audio** lets you choose a file and enter the Roblox sound ID it should replace.
 
-1. Create a rule with an exact Roblox asset ID.
-2. Pick a local replacement file or paste a direct `http/https` URL.
-3. Save and apply the rule.
-4. The app downloads the original Roblox asset for that ID, resolves your replacement source to a local file, auto-converts unsupported replacement formats to a cached MP3 when needed, and remembers the replacement hash.
-5. When Roblox has the matching sound cached locally, the app replaces that cached `RBX...` file with your local file.
+Enabling prepares the source in the background and watches `%TEMP%\Roblox\sounds`. Matching originals are replaced automatically, including when Roblox downloads them again. Only one replacement is enabled per Roblox sound ID. Stored files, direct HTTP/HTTPS audio links, and song codes are supported; readable formats beyond MP3/WAV/OGG are converted automatically.
 
-Important behavior:
+Disabling or removing a sound queues restoration of its original. The queue survives application restarts and retries without a time limit while the app is open. Keep MNTBloxAudio open for automatic replacement and restoration.
 
-- If a rule is enabled, the app will try to replace matching cached audio.
-- If a rule is disabled, Roblox keeps the original audio.
-- If the matching cache file disappears later, the app disables that rule and clears its prepared state.
-- The background proxy watcher is only used to notice Roblox asset re-fetches and trigger a cache re-check. It is not the main replacement path.
-- `MP3`, `WAV`, and `OGG` are used directly. Other readable formats such as `M4A` are converted to a cached `MP3` automatically.
-- If a source format needs `ffmpeg` and it is not already installed, the app can download a verified local copy into `%AppData%\MNTBloxAudio\tools\ffmpeg`.
+Windows exposes overall Roblox audio activity, not playback of individual asset IDs. Restoration therefore waits for 1.5 seconds of overall Roblox silence and exclusive file access; other Roblox audio can delay restoration. Sounds already decoded into Roblox memory cannot be changed retroactively. The new cached bytes take effect when Roblox reads the file again.
 
-## UI
+## Updates
 
-The app is intentionally split into two tabs:
+The published `MNTBloxAudio.exe` automatically checks stable GitHub Releases from `MINTILER-DEV/MNTBloxAudio` on startup, downloads newer releases, and verifies the SHA-256 digest and size provided by GitHub. Choose **Restart to update** to install. The helper waits for the application to save and exit, atomically replaces the executable, and keeps a `.previous` backup. Settings and recovery data stay in AppData.
 
-- `Rules`
-  - Main workflow
-  - Add a rule, set the Roblox asset ID, choose a replacement file or paste a URL, enable or disable the rule, then use `Save + Apply Rule`
-  - `Apply All` prepares and applies every enabled rule
-- `Advanced`
-  - Cached sound list
-  - Activity log
-  - Auto-apply toggle for Roblox re-fetch detection
+Offline checks leave the app usable; click the update status to retry. Development builds cannot install over themselves. Update installation requires a writable application folder. Failed installs are logged under `%LocalAppData%\MNTBloxAudio\updates\<version>\install.log`.
 
-## Main workflow
+To publish a future update, bump the project version and push the matching `vX.Y.Z` tag. `.github/workflows/release.yml` tests and publishes the executable to GitHub Releases. A repository commit alone is not an executable update.
 
-For one rule:
+## Build and test
 
-1. Open `Rules`
-2. Click `Add`
-3. Enter the exact Roblox asset ID
-4. Click `Browse File` or paste a URL into the replacement source box
-5. Enable the rule
-6. Click `Save + Apply Rule`
-
-For all enabled rules:
-
-1. Open `Rules`
-2. Make sure the rules you want are enabled
-3. Click `Apply All`
-
-## Notes about replacement
-
-- The app replaces the contents of the cached `RBX...` file and keeps the same filename.
-- A backup of the original cached file is stored in `%AppData%\MNTBloxAudio\sound-cache-backups`.
-- If Roblox is actively using a cache file, the app now skips that file instead of crashing.
-- If a cache file is already replaced, the app will not overwrite it again unnecessarily.
-
-## Requirements
-
-- Windows
-- .NET SDK 10
-
-The app shell is WPF and the audio/session inspection is Windows-specific.
-
-## Run from source
+Requires Windows and the .NET 10 SDK.
 
 ```powershell
-dotnet build .\MNTBloxAudio.slnx
-dotnet run --project .\MNTBloxAudio.App
+dotnet build MNTBloxAudio.slnx
+dotnet run --project MNTBloxAudio.Tests
+.\buildproj.bat
 ```
 
-## Build / publish
+The test harness covers cache ownership, busy-file retries, restoration after restart/removal, legacy backup migration, source integrity, and version parsing. It also renders the real WPF Search and Stored templates to `artifacts/ui` without starting Roblox monitoring or changing the saved library.
 
-### Debug build
+The single-file build is written to `publish/MNTBloxAudio.exe`.
 
-```powershell
-dotnet build .\MNTBloxAudio.slnx
-```
+## Data and recovery
 
-## Troubleshooting
+Settings live in `%AppData%\MNTBloxAudio\settings.json`, with atomic saves. Original audio and the replacement ownership manifest live in `sound-cache-backups` beside it. Do not delete that folder while replacements are active. Backups from earlier releases are imported when their original and replacement hashes match saved rules.
 
-### The app says no match was found
-
-- Make sure the rule uses the exact Roblox asset ID
-- Make sure the rule is enabled
-- Make sure the replacement file still exists, or that the replacement URL is still reachable
-- Make sure Roblox has already downloaded that sound into `%TEMP%\Roblox\sounds`
-- Check the `Advanced` tab and compare the cached sound state against your rule
-
-### The app skips a file while audio is playing
-
-That usually means Roblox currently has the cached file open. The app will skip instead of forcing the write. Try again after the sound stops or after Roblox re-fetches the asset.
-
-### The rule becomes disabled by itself
-
-That happens when the app had seen a matching cache file for the rule earlier, but Roblox later removed that cached file. The rule is disabled and reset to avoid leaving stale prepared state behind.
-
-## Project structure
-
-- [MNTBloxAudio.App](/D:/GitHub/Repositories/MNTBloxAudio/MNTBloxAudio.App) - WPF UI and view model
-- [MNTBloxAudio.Core](/D:/GitHub/Repositories/MNTBloxAudio/MNTBloxAudio.Core) - services, models, cache handling, Roblox asset preparation
+MNTBloxIndex is maintained in the separate nested repository and deployed at https://mntbloxindex.vercel.app. **Share audio** opens its submission page.
