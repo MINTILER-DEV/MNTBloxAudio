@@ -47,3 +47,9 @@ The single-file build is written to `publish/MNTBloxAudio.exe`.
 Settings live in `%AppData%\MNTBloxAudio\settings.json`, with atomic saves. Original audio and the replacement ownership manifest live in `sound-cache-backups` beside it. Do not delete that folder while replacements are active. Backups from earlier releases are imported when their original and replacement hashes match saved rules.
 
 MNTBloxIndex is maintained in the separate nested repository and deployed at https://mntbloxindex.vercel.app. **Share audio** opens its submission page.
+
+### Startup recovery
+
+Starting with 1.3.2, settings and cache recovery records have a `.backup` copy. Empty or invalid JSON no longer prevents startup: the app recovers a valid backup, or starts with default settings if none exists. Damaged files are preserved with a `.corrupt-...` suffix, and a status message explains the recovery.
+
+If cache ownership records are unrecoverable while original audio backups exist, automatic cache changes are paused. The app keeps those original audio files intact; it cannot safely infer which original belongs to an already replaced file. Keep the recovery folder for diagnosis instead of deleting its backups.

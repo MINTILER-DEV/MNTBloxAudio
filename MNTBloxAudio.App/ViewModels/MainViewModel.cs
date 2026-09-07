@@ -83,7 +83,8 @@ public partial class MainViewModel : ObservableObject
         OpenIndexCommand.NotifyCanExecuteChanged();
         CopyDeviceIdCommand.NotifyCanExecuteChanged();
         NotifyLibrary();
-        Status = "Store a song for later, or enable it to replace audio automatically.";
+        Status = string.Join(" ", new[] { settingsStore.RecoveryNotice, cache.RecoveryNotice }.Where(notice => !string.IsNullOrEmpty(notice)));
+        if (string.IsNullOrEmpty(Status)) Status = "Store a song for later, or enable it to replace audio automatically.";
         monitorTask = MonitorAsync(lifetime.Token);
         updateTask = CheckForUpdatesAsync();
     }
@@ -344,9 +345,11 @@ public partial class MainViewModel : ObservableObject
                 prepared.TryGetValue(rule, out var ready) && ready.Source == rule.FilePath && ready.Asset == rule.AssetIdPattern
                     ? ready.Prepared : new PreparedCacheRule(rule.AssetIdPattern, rule.SourceAssetHash, rule.ReplacementFileHash, "")).ToArray();
             var result = await Task.Run(() => { cache.ImportLegacyBackups(known); return cache.Synchronize(desired); }, token);
+            if (result.Errors.TryGetValue("*", out var recoveryError)) Status = recoveryError;
             foreach (var rule in Rules)
             {
-                if (result.Errors.TryGetValue(rule.AssetIdPattern, out var error)) rule.AutomationStatus = $"{(rule.IsEnabled ? "Replacement" : "Restore")} failed - {error}";
+                if (result.Errors.TryGetValue("*", out var globalError)) rule.AutomationStatus = globalError;
+                else if (result.Errors.TryGetValue(rule.AssetIdPattern, out var error)) rule.AutomationStatus = $"{(rule.IsEnabled ? "Replacement" : "Restore")} failed - {error}";
                 else if (!rule.IsEnabled) rule.AutomationStatus = result.PendingAssets.Contains(rule.AssetIdPattern) ? "Waiting for the cache file to be released - retrying automatically" : "Stored - disabled";
                 else if (result.AppliedAssets.Contains(rule.AssetIdPattern)) rule.AutomationStatus = "Enabled - replaced";
                 else if (prepared.ContainsKey(rule)) rule.AutomationStatus = "Enabled - waiting for cached audio";

@@ -14,24 +14,30 @@ public sealed class SettingsStore
     private readonly string settingsPath;
     private readonly SemaphoreSlim saveLock = new(1, 1);
 
-    public SettingsStore()
+    public string? RecoveryNotice { get; private set; }
+
+    public SettingsStore(string? stateDirectory = null)
     {
-        settingsPath = Path.Combine(
+        settingsPath = Path.Combine(stateDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "MNTBloxAudio",
+            "MNTBloxAudio"),
             "settings.json");
     }
 
-    public async Task<AppSettings> LoadAsync()
+    public Task<AppSettings> LoadAsync()
     {
-        if (!File.Exists(settingsPath))
+        var result = RecoverableJsonFile.Load(settingsPath, () => new AppSettings(), SerializerOptions);
+        RecoveryNotice = result.Notice;
+        var settings = result.Value;
+        settings.Rules = (settings.Rules ?? []).Where(rule => rule is not null).ToList();
+        settings.UploadedSongs = (settings.UploadedSongs ?? []).Where(song => song is not null).ToList();
+        foreach (var rule in settings.Rules)
         {
-            return new AppSettings();
+            rule.Name ??= "My audio";
+            rule.AssetIdPattern ??= string.Empty;
+            rule.FilePath ??= string.Empty;
         }
-
-        await using var stream = File.OpenRead(settingsPath);
-        var settings = await JsonSerializer.DeserializeAsync<AppSettings>(stream, SerializerOptions).ConfigureAwait(false);
-        return settings ?? new AppSettings();
+        return Task.FromResult(settings);
     }
 
     public async Task SaveAsync(AppSettings settings)
@@ -41,10 +47,7 @@ public sealed class SettingsStore
         await saveLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-            var temporary = settingsPath + ".tmp";
-            await File.WriteAllTextAsync(temporary, json).ConfigureAwait(false);
-            File.Move(temporary, settingsPath, true);
+            await Task.Run(() => RecoverableJsonFile.Save(settingsPath, json)).ConfigureAwait(false);
         }
         finally { saveLock.Release(); }
     }

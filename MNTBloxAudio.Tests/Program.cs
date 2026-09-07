@@ -74,12 +74,62 @@ internal static class Program
             var uploadUri = DeviceIdentityService.BuildUploadUri("https://mntbloxindex.vercel.app/", existingDeviceId);
             Check(uploadUri.AbsolutePath == "/upload.html" && uploadUri.Query == "", "Open upload without putting device identity in server query logs");
             Check(uploadUri.Fragment == "#deviceId=MNT_existing-123", "Pass the saved app identity to the browser fragment");
+            TestStartupRecovery(root).GetAwaiter().GetResult();
             TestRestoreFailures(root);
             TestUpdater(root).GetAwaiter().GetResult();
             Console.WriteLine($"PASS: {assertions} cache recovery and update assertions");
             RenderUi();
         }
         finally { Directory.Delete(root, true); }
+    }
+    private static async Task TestStartupRecovery(string root)
+    {
+        foreach (var invalid in new[] { "", "   ", "null", "{", "[]", "42", "{\"rules\": 42}" })
+        {
+            var directory = Path.Combine(root, "settings-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "settings.json"); File.WriteAllText(path, invalid);
+            var store = new SettingsStore(directory);
+            var settings = await store.LoadAsync();
+            Check(settings.Rules.Count == 0 && store.RecoveryNotice is not null, "Invalid startup settings fall back without crashing");
+            Check(Directory.EnumerateFiles(directory, "settings.json.corrupt-*").Any(file => File.ReadAllText(file) == invalid), "Preserve the damaged settings bytes");
+            await store.SaveAsync(settings);
+            Check((await new SettingsStore(directory).LoadAsync()).Rules.Count == 0, "Recovered settings survive restart");
+        }
+        var savedDirectory = Path.Combine(root, "saved-settings");
+        var savedStore = new SettingsStore(savedDirectory);
+        var saved = new AppSettings { DeviceId = "keep-device", Rules = [new ReplacementRule { Name = "Keep my sound" }] };
+        await savedStore.SaveAsync(saved);
+        File.WriteAllText(Path.Combine(savedDirectory, "settings.json"), "");
+        var recoveredStore = new SettingsStore(savedDirectory);
+        var recovered = await recoveredStore.LoadAsync();
+        Check(recovered.DeviceId == "keep-device" && recovered.Rules.Single().Name == "Keep my sound", "Recover library and device ID from the newest settings backup");
+        Check(recoveredStore.RecoveryNotice is not null, "Tell the user settings were recovered");
+        File.WriteAllText(Path.Combine(savedDirectory, "settings.json"), "{\"rules\":null,\"uploadedSongs\":null}");
+        recovered = await new SettingsStore(savedDirectory).LoadAsync();
+        Check(recovered.Rules.Count == 0 && recovered.UploadedSongs.Count == 0, "Normalize null collections on startup");
+        var cleanState = Path.Combine(root, "empty-manifest-state");
+        var cleanBackups = Path.Combine(cleanState, "sound-cache-backups"); Directory.CreateDirectory(cleanBackups);
+        File.WriteAllText(Path.Combine(cleanBackups, "replacements.json"), "");
+        var emptyEngine = new AutomaticCacheService(Path.Combine(root, "missing-cache"), cleanState);
+        Check(emptyEngine.Synchronize([]).Errors.Count == 0, "An empty manifest with no audio backups can safely start fresh");
+
+        var cachePath = Path.Combine(root, "manifest-cache"); Directory.CreateDirectory(cachePath);
+        var statePath = Path.Combine(root, "manifest-state");
+        var audio = Path.Combine(cachePath, "RBXrecover"); File.WriteAllText(audio, "original");
+        var source = Path.Combine(root, "manifest-source.mp3"); File.WriteAllText(source, "replacement");
+        var rule = new PreparedCacheRule("recovery", Hash("original"), Hash("replacement"), source);
+        var engine = new AutomaticCacheService(cachePath, statePath); engine.Synchronize([rule]);
+        var manifest = Path.Combine(statePath, "sound-cache-backups", "replacements.json");
+        File.WriteAllText(manifest, "");
+        engine = new AutomaticCacheService(cachePath, statePath);
+        Check(engine.RecoveryNotice is not null && engine.Synchronize([]).Errors.Count == 0, "Recover damaged cache manifest from a complete ownership backup");
+        Check(File.ReadAllText(audio) == "original", "Recovered manifest still restores the correct original");
+        engine.Synchronize([rule]);
+        File.WriteAllText(manifest, "{"); File.WriteAllText(manifest + ".backup", "null");
+        engine = new AutomaticCacheService(cachePath, statePath);
+        Check(engine.Synchronize([]).Errors.ContainsKey("*"), "Unrecoverable ownership pauses cache changes instead of crashing");
+        Check(File.ReadAllText(audio) == "replacement" && File.ReadAllText(Path.Combine(statePath, "sound-cache-backups", Hash("original") + ".original")) == "original", "Keep all audio intact when ownership cannot be recovered");
     }
     private static void TestRestoreFailures(string root)
     {

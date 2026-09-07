@@ -1,4 +1,11 @@
-﻿# MNTBloxAudio 1.3.1
+﻿# 1.3.2
+
+- Fixed startup crashes caused by empty, truncated, or invalid settings and cache recovery JSON.
+- Save flushed, atomic primary files and backup copies; recover the saved library, device ID, and replacement ownership from a valid backup when possible.
+- Preserve damaged files with a `.corrupt-...` suffix. If no settings backup exists, start with defaults and a recovery notice.
+- If cache ownership is unrecoverable and original audio backups exist, open the app with cache changes paused rather than risking incorrect restoration.
+
+# MNTBloxAudio 1.3.1
 
 - Fixed disabled sounds remaining stuck on restoration while unrelated Roblox audio was playing. Restore now depends only on exclusive access to the affected cache file.
 - Distinguish real file locks from missing/corrupt original backups and permission errors, with automatic retries after recovery.

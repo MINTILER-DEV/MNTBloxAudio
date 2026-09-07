@@ -14,6 +14,8 @@ public sealed class AutomaticCacheService
     private readonly string backupDirectory;
     private readonly string manifestPath;
     private readonly Dictionary<string, Replacement> replacements;
+    private readonly bool recoveryBlocked;
+    public string? RecoveryNotice { get; }
 
     public AutomaticCacheService(string? cacheDirectory = null, string? stateDirectory = null)
     {
@@ -22,17 +24,33 @@ public sealed class AutomaticCacheService
         backupDirectory = Path.Combine(state, "sound-cache-backups");
         manifestPath = Path.Combine(backupDirectory, "replacements.json");
         Directory.CreateDirectory(backupDirectory);
-        replacements = File.Exists(manifestPath)
-            ? JsonSerializer.Deserialize<Dictionary<string, Replacement>>(File.ReadAllText(manifestPath))
-                ?? throw new InvalidDataException("The cache recovery manifest is empty.")
-            : new(StringComparer.OrdinalIgnoreCase);
+        var result = RecoverableJsonFile.Load(manifestPath,
+            () => new Dictionary<string, Replacement>(StringComparer.OrdinalIgnoreCase),
+            validate: records => records.All(entry => entry.Key.StartsWith("RBX", StringComparison.OrdinalIgnoreCase)
+                && Path.GetFileName(entry.Key) == entry.Key && entry.Value is not null
+                && !string.IsNullOrWhiteSpace(entry.Value.AssetId)
+                && IsHash(entry.Value.OriginalHash) && IsHash(entry.Value.ReplacementHash)));
+        replacements = new(result.Value, StringComparer.OrdinalIgnoreCase);
+        recoveryBlocked = result.ResetDamagedFile && Directory.EnumerateFiles(backupDirectory)
+            .Any(path => path.EndsWith(".original", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".bak", StringComparison.OrdinalIgnoreCase));
+        RecoveryNotice = recoveryBlocked
+            ? "Cache recovery records are damaged. Automatic cache changes are paused; your original audio backups are untouched."
+            : result.Notice;
+        if (result.Notice is not null && !recoveryBlocked) SaveManifest();
     }
+
+    private static bool IsHash(string? value) => value?.Length == 64 && value.All(Uri.IsHexDigit);
 
     public CacheSyncResult Synchronize(IReadOnlyList<PreparedCacheRule> desired)
     {
         var applied = new HashSet<string>();
         var pending = new HashSet<string>();
         var errors = new Dictionary<string, string>();
+        if (recoveryBlocked)
+        {
+            errors["*"] = RecoveryNotice!;
+            return new(applied, pending, errors);
+        }
         if (!Directory.Exists(cacheDirectory)) return new(applied, pending, errors);
 
         foreach (var path in Directory.EnumerateFiles(cacheDirectory, "RBX*"))
@@ -104,6 +122,7 @@ public sealed class AutomaticCacheService
 
     public void ImportLegacyBackups(IReadOnlyList<PreparedCacheRule> knownRules)
     {
+        if (recoveryBlocked) return;
         if (!Directory.Exists(cacheDirectory)) return;
         foreach (var path in Directory.EnumerateFiles(cacheDirectory, "RBX*"))
         {
@@ -129,9 +148,7 @@ public sealed class AutomaticCacheService
 
     private void SaveManifest()
     {
-        var temporary = manifestPath + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(replacements));
-        File.Move(temporary, manifestPath, true);
+        RecoverableJsonFile.Save(manifestPath, JsonSerializer.Serialize(replacements));
     }
 
     private static string Hash(Stream stream)
