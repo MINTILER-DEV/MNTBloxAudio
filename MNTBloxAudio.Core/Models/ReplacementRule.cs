@@ -6,6 +6,14 @@ namespace MNTBloxAudio.Core.Models;
 
 public sealed class ReplacementRule : INotifyPropertyChanged
 {
+    public string SongCode { get; set; } = string.Empty;
+    private string automationStatus = "Stored";
+    [JsonIgnore]
+    public string AutomationStatus
+    {
+        get => automationStatus;
+        set => SetField(ref automationStatus, value);
+    }
     private const int CurrentPreparationVersion = 2;
     private string name = "New Rule";
     private string assetIdPattern = string.Empty;

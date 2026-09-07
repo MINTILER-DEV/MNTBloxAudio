@@ -1,0 +1,152 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace MNTBloxAudio.Core.Services;
+
+public sealed record PreparedCacheRule(string AssetId, string OriginalHash, string ReplacementHash, string LocalPath);
+public sealed record CacheSyncResult(HashSet<string> AppliedAssets, HashSet<string> PendingAssets);
+
+/// <summary>Serial, durable cache reconciliation. Never infer asset identity from request timing.</summary>
+public sealed class AutomaticCacheService
+{
+    public sealed record Replacement(string AssetId, string OriginalHash, string ReplacementHash);
+    private readonly string cacheDirectory;
+    private readonly string backupDirectory;
+    private readonly string manifestPath;
+    private readonly Dictionary<string, Replacement> replacements;
+
+    public AutomaticCacheService(string? cacheDirectory = null, string? stateDirectory = null)
+    {
+        this.cacheDirectory = cacheDirectory ?? Path.Combine(Path.GetTempPath(), "Roblox", "sounds");
+        var state = stateDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MNTBloxAudio");
+        backupDirectory = Path.Combine(state, "sound-cache-backups");
+        manifestPath = Path.Combine(backupDirectory, "replacements.json");
+        Directory.CreateDirectory(backupDirectory);
+        replacements = File.Exists(manifestPath)
+            ? JsonSerializer.Deserialize<Dictionary<string, Replacement>>(File.ReadAllText(manifestPath))
+                ?? throw new InvalidDataException("The cache recovery manifest is empty.")
+            : new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public CacheSyncResult Synchronize(IReadOnlyList<PreparedCacheRule> desired, bool robloxAudioBusy)
+    {
+        var applied = new HashSet<string>();
+        var pending = new HashSet<string>();
+        if (!Directory.Exists(cacheDirectory)) return new(applied, pending);
+
+        foreach (var path in Directory.EnumerateFiles(cacheDirectory, "RBX*"))
+        {
+            var name = Path.GetFileName(path);
+            replacements.TryGetValue(name, out var previous);
+            try
+            {
+                // FileShare.None prevents writing while Roblox holds a handle, even a shared read handle.
+                using var file = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                var hash = Hash(file);
+                if (previous is not null)
+                {
+                    var keep = desired.Any(rule => rule.AssetId == previous.AssetId && rule.ReplacementHash == previous.ReplacementHash);
+                    if (hash == previous.ReplacementHash && keep)
+                    {
+                        applied.Add(previous.AssetId);
+                        continue;
+                    }
+                    if (hash == previous.ReplacementHash)
+                    {
+                        if (robloxAudioBusy) { pending.Add(previous.AssetId); continue; }
+                        var backup = Path.Combine(backupDirectory, previous.OriginalHash + ".original");
+                        WriteVerified(file, backup, previous.OriginalHash);
+                        hash = previous.OriginalHash;
+                    }
+                    // Roblox may have evicted/reused this filename. Never restore over unrelated bytes.
+                    replacements.Remove(name);
+                    SaveManifest();
+                }
+
+                var match = desired.FirstOrDefault(rule => rule.OriginalHash == hash && rule.ReplacementHash != hash);
+                if (match is null) continue;
+                var backupPath = Path.Combine(backupDirectory, hash + ".original");
+                if (!File.Exists(backupPath))
+                {
+                    file.Position = 0;
+                    using var backup = new FileStream(backupPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                    file.CopyTo(backup);
+                    backup.Flush(true);
+                }
+                // Persist recovery ownership before modifying audio, including when a rule is later removed.
+                replacements[name] = new(match.AssetId, hash, match.ReplacementHash);
+                SaveManifest();
+                WriteVerified(file, match.LocalPath, match.ReplacementHash);
+                applied.Add(match.AssetId);
+            }
+            catch (IOException) { if (previous is not null) pending.Add(previous.AssetId); }
+            catch (UnauthorizedAccessException) { if (previous is not null) pending.Add(previous.AssetId); }
+        }
+        return new(applied, pending);
+    }
+
+    public void ImportLegacyBackups(IReadOnlyList<PreparedCacheRule> knownRules)
+    {
+        if (!Directory.Exists(cacheDirectory)) return;
+        foreach (var path in Directory.EnumerateFiles(cacheDirectory, "RBX*"))
+        {
+            var name = Path.GetFileName(path);
+            var legacy = Path.Combine(backupDirectory, name + ".bak");
+            if (replacements.ContainsKey(name) || !File.Exists(legacy)) continue;
+            try
+            {
+                using var file = File.OpenRead(path);
+                using var backup = File.OpenRead(legacy);
+                var currentHash = Hash(file);
+                var originalHash = Hash(backup);
+                var match = knownRules.FirstOrDefault(rule => rule.OriginalHash == originalHash && rule.ReplacementHash == currentHash);
+                if (match is null) continue;
+                File.Copy(legacy, Path.Combine(backupDirectory, originalHash + ".original"), true);
+                replacements[name] = new(match.AssetId, originalHash, currentHash);
+                SaveManifest();
+            }
+            catch (IOException) { /* Retry on the next pass when the cache file is released. */ }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private void SaveManifest()
+    {
+        var temporary = manifestPath + ".tmp";
+        File.WriteAllText(temporary, JsonSerializer.Serialize(replacements));
+        File.Move(temporary, manifestPath, true);
+    }
+
+    private static string Hash(Stream stream)
+    {
+        stream.Position = 0;
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static void WriteVerified(FileStream destination, string sourcePath, string expectedHash)
+    {
+        using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (Hash(source) != expectedHash) throw new IOException("Audio changed since preparation; waiting for a verified source.");
+        // Keep the current bytes for rollback if a write fails midway.
+        using var rollback = new MemoryStream();
+        destination.Position = 0;
+        destination.CopyTo(rollback);
+        try
+        {
+            source.Position = 0;
+            destination.Position = 0;
+            source.CopyTo(destination);
+            destination.SetLength(source.Length);
+            destination.Flush(true);
+        }
+        catch
+        {
+            rollback.Position = 0;
+            destination.Position = 0;
+            rollback.CopyTo(destination);
+            destination.SetLength(rollback.Length);
+            destination.Flush(true);
+            throw;
+        }
+    }
+}
